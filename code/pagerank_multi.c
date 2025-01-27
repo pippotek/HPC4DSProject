@@ -2,13 +2,13 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
-#include <omp.h>         // OpenMP library
+#include <omp.h>  // Include OpenMP header
 
 #define MAX_NODES 1000000000      // Maximum number of nodes in the graph
 #define MAX_EDGES 2000000000      // Maximum number of edges in the graph
 #define DAMPING_FACTOR 0.85       // Damping factor for PageRank calculation
 #define MAX_ITER 100              // Maximum number of iterations for convergence
-#define TOLERANCE 1e-6           // Convergence tolerance
+#define TOLERANCE 1e-6            // Convergence tolerance
 #define TOP_K 10                  // Number of top nodes to display by PageRank
 
 typedef struct {
@@ -46,7 +46,7 @@ void read_edges(const char *filename) {
 
     while (fscanf(file, "%d %d", &edges[edge_count].from, &edges[edge_count].to) == 2) {
         int from = edges[edge_count].from;
-        int to = edges[edge_count].to;
+        int to   = edges[edge_count].to;
 
         if (from >= MAX_NODES || to >= MAX_NODES) {
             fprintf(stderr, "Node id exceeds maximum allowed value.\n");
@@ -62,10 +62,11 @@ void read_edges(const char *filename) {
     }
     fclose(file);
 
+    // node_count was tracking max node ID; increment to get actual count
     node_count++;
 }
 
-// Function to initialize the ranks of all nodes and the top nodes array
+// Function to initialize the ranks of all nodes
 void initialize_ranks() {
     rank = malloc(sizeof(double) * node_count);
     temp_rank = malloc(sizeof(double) * node_count);
@@ -73,99 +74,50 @@ void initialize_ranks() {
         fprintf(stderr, "Memory allocation failed\n");
         exit(EXIT_FAILURE);
     }
-    
+
     double initial_rank = 1.0 / node_count;
+
+    #pragma omp parallel for
     for (int i = 0; i < node_count; i++) {
         rank[i] = initial_rank;
     }
+}
 
+// Compute the final top 10 nodes after ranks have converged
+void compute_top_10_ranks() {
+    // Initialize top_nodes
     for (int i = 0; i < TOP_K; i++) {
         top_nodes[i].node = -1;
         top_nodes[i].rank = -1.0;
     }
-}
 
-// Helper function to check if a node is in the top nodes
-int is_in_top_nodes(int node) {
-    for (int i = 0; i < TOP_K; i++) {
-        if (top_nodes[i].node == node) {
-            return 1; // Node is already in the top list
-        }
-    }
-    return 0;
-}
+    // A simple approach: for each node, see if it belongs in the top 10
+    for (int i = 0; i < node_count; i++) {
+        double rank_value = rank[i];
 
-// Function to update the top nodes with the given node and its rank
-void update_top_nodes(int node, double rank_value) {
-    // Skip if the node is already in the top list
-    if (is_in_top_nodes(node)) return;
-
-    // Find the position of the minimum rank in top_nodes
-    int min_index = 0;
-    for (int i = 1; i < TOP_K; i++) {
-        if (top_nodes[i].rank < top_nodes[min_index].rank) {
-            min_index = i;
-        }
-    }
-
-    // Update the top_nodes array only if the current rank is higher than the minimum
-    if (rank_value > top_nodes[min_index].rank || top_nodes[min_index].node == -1) {
-        top_nodes[min_index].node = node;
-        top_nodes[min_index].rank = rank_value;
-    }
-}
-
-// Function to calculate PageRank iteratively until convergence or max iterations
-void calculate_pagerank() {
-    omp_set_num_threads(4);
-    clock_t start_time = clock();
-
-    for (int iter = 0; iter < MAX_ITER; iter++) {
-        #pragma omp parallel for
-        for (int i = 0; i < node_count; i++) {
-            temp_rank[i] = (1.0 - DAMPING_FACTOR) / node_count;
-        }
-
-        #pragma omp parallel for
-        for (int i = 0; i < edge_count; i++) {
-            int from = edges[i].from;
-            int to = edges[i].to;
-
-            if (out_degree[from] > 0) {
-                #pragma omp atomic
-                temp_rank[to] += DAMPING_FACTOR * rank[from] / out_degree[from];
+        // Find the position of the minimum rank in top_nodes
+        int min_index = 0;
+        for (int j = 1; j < TOP_K; j++) {
+            if (top_nodes[j].rank < top_nodes[min_index].rank) {
+                min_index = j;
             }
         }
-
-        double diff = 0;
-        #pragma omp parallel for reduction(+:diff)
-        for (int i = 0; i < node_count; i++) {
-            diff += fabs(temp_rank[i] - rank[i]);
-            rank[i] = temp_rank[i];
-            
-            // Update the top nodes with the new rank value
+        // Update the top_nodes array only if the current rank is higher than the minimum
+        if (rank_value > top_nodes[min_index].rank) {
             #pragma omp critical
             {
-                update_top_nodes(i, rank[i]);
+                if (rank_value > top_nodes[min_index].rank) {
+                    top_nodes[min_index].node = i;
+                    top_nodes[min_index].rank = rank_value;
+                }
             }
         }
-
-        if (diff < TOLERANCE) {
-            printf("Converged after %d iterations\n", iter + 1);
-            break;
-        }
     }
-
-    clock_t end_time = clock();
-    double time_taken = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-    printf("Time taken to converge: %.6f seconds\n", time_taken);
 }
 
-// Function to print the top 10 nodes by PageRank
+// Sort and print the top 10 nodes by PageRank
 void print_top_10_ranks() {
-    printf("Top 10 nodes by PageRank:\n");
-
-    // Sort the top_nodes array for displaying in descending order
+    // Sort the top_nodes array in descending order
     for (int i = 0; i < TOP_K - 1; i++) {
         for (int j = i + 1; j < TOP_K; j++) {
             if (top_nodes[j].rank > top_nodes[i].rank) {
@@ -176,15 +128,63 @@ void print_top_10_ranks() {
         }
     }
 
-    // Print the sorted top nodes
+    printf("Top 10 nodes by PageRank:\n");
     for (int i = 0; i < TOP_K && top_nodes[i].node != -1; i++) {
-        printf("Node %d: %.14f\n", top_nodes[i].node, top_nodes[i].rank);
+        printf("Node %d: %.6f\n", top_nodes[i].node, top_nodes[i].rank);
     }
 }
 
-int main(int argc, char *argv[]) {
+// Function to calculate PageRank iteratively until convergence or max iterations
+void calculate_pagerank() {
+    #pragma omp parallel
+    {
+        #pragma omp master
+        {
+            printf("PageRank will run with %d threads\n", omp_get_num_threads());
+        }
+    }
+    double start_time = omp_get_wtime();  // Use OpenMP's wall-time
 
-    
+    for (int iter = 0; iter < MAX_ITER; iter++) {
+        // 1. Reset temp_rank for all nodes
+        #pragma omp parallel for
+        for (int i = 0; i < node_count; i++) {
+            temp_rank[i] = (1.0 - DAMPING_FACTOR) / node_count;
+        }
+
+        // 2. Distribute contributions from each edge
+        #pragma omp parallel for
+        for (int i = 0; i < edge_count; i++) {
+            int from = edges[i].from;
+            int to   = edges[i].to;
+            if (out_degree[from] > 0) {
+                double contrib = DAMPING_FACTOR * rank[from] / out_degree[from];
+                #pragma omp atomic
+                temp_rank[to] += contrib;
+            }
+        }
+
+        // 3. Compute the difference (for convergence check) and update rank
+        double diff_local = 0.0;
+
+        #pragma omp parallel for reduction(+:diff_local)
+        for (int i = 0; i < node_count; i++) {
+            diff_local += fabs(temp_rank[i] - rank[i]);
+            rank[i] = temp_rank[i];
+        }
+
+        if (diff_local < TOLERANCE) {
+            printf("Converged after %d iterations\n", iter + 1);
+            break;
+        }
+    }
+
+    double end_time = omp_get_wtime();
+    printf("Time taken to converge: %.6f seconds\n", end_time - start_time);
+}
+
+int main(int argc, char *argv[]) {
+    omp_set_num_threads(8);  // Set the number of threads
 
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <edge_list_file>\n", argv[0]);
@@ -197,7 +197,11 @@ int main(int argc, char *argv[]) {
     printf("Number of nodes: %d\n", node_count);
 
     initialize_ranks();
+
     calculate_pagerank();
+
+    // Now that ranks have converged, identify the top 10 nodes:
+    compute_top_10_ranks();
     print_top_10_ranks();
 
     // Free dynamically allocated memory

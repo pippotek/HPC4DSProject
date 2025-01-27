@@ -174,6 +174,8 @@ void print_top_10_ranks() {
 }
 
 int main(int argc, char *argv[]) {
+
+     
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <edge_list_file>\n", argv[0]);
         return EXIT_FAILURE;
