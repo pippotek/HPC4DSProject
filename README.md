@@ -79,9 +79,46 @@ All implementations can be compiled using `gcc`. For the multithreaded versions,
 # Compile the sequential version
 gcc -o pagerank_sequential pagerank_sequential.c -lm
 
-# Compile the basic multithreading version
+# Compile the  multithreading versions
 gcc -o pagerank_multithread pagerank_multithread.c -lm -fopenmp
 
-# Compile the optimized multithreading version
-gcc -o pagerank_multithread_optimized pagerank_multithread_optimized.c -lm -fopenmp
+```
+### Running
+```bash
+# All of the versions are run in the same way
+./pagerank_multithread edge_list.txt
+```
+### Edge List Format
+
+The input file should contain one edge per line in the format:
+
+`<source_node> <destination_node>`
+
+#### Example
+
+```plaintext
+0 1
+1 2
+2 0
+```
+
+### Output
+
+Each implementation outputs the following information:
+
+- **Total number of nodes and edges**
+- **Time taken for convergence**
+- **Top 10 nodes with the highest PageRank**
+
+#### Example Output
+```plaintext
+Number of edges: 3
+Number of nodes: 3
+Converged after 20 iterations
+Time taken to converge: 0.123456 seconds
+
+Top 10 nodes by PageRank:
+Node 2: 0.3876543210
+Node 0: 0.3065432109
+Node 1: 0.3058024671
 ```
