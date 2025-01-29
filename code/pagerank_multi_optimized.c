@@ -33,12 +33,11 @@ int edge_count = 0;
 //-------------------------------------------------------------------------
 // Read the edge list from a file, track max node ID => node_count
 //-------------------------------------------------------------------------
-void read_edges(const char *filename)
-{
+void read_edges(const char *filename) {
     edges = (Edge*) malloc(sizeof(Edge) * MAX_EDGES);
     out_degree = (int*) calloc(MAX_NODES, sizeof(int));
     if (!edges || !out_degree) {
-        fprintf(stderr, "Memory allocation failed for edges/out_degree.\n");
+        fprintf(stderr, "Memory allocation failed\n");
         exit(EXIT_FAILURE);
     }
 
@@ -48,26 +47,35 @@ void read_edges(const char *filename)
         exit(EXIT_FAILURE);
     }
 
-    while (fscanf(file, "%d %d", &edges[edge_count].from, &edges[edge_count].to) == 2) {
-        int from = edges[edge_count].from;
-        int to   = edges[edge_count].to;
-
-        if (from >= MAX_NODES || to >= MAX_NODES) {
-            fprintf(stderr, "Node id exceeds maximum allowed value.\n");
-            exit(EXIT_FAILURE);
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        // Ignore lines starting with '#'
+        if (line[0] == '#') {
+            continue;
         }
 
-        out_degree[from]++;
-        
-        // Track the max node id
-        if (from > node_count) node_count = from;
-        if (to   > node_count) node_count = to;
+        int from, to;
+        if (sscanf(line, "%d %d", &from, &to) == 2) {
+            if (from >= MAX_NODES || to >= MAX_NODES) {
+                fprintf(stderr, "Node id exceeds maximum allowed value.\n");
+                exit(EXIT_FAILURE);
+            }
 
-        edge_count++;
+            edges[edge_count].from = from;
+            edges[edge_count].to = to;
+
+            out_degree[from]++;
+
+            // Track highest node ID to compute node_count
+            if (from > node_count) node_count = from;
+            if (to > node_count) node_count = to;
+
+            edge_count++;
+        }
     }
     fclose(file);
 
-    // node_count is max ID; +1 to get count
+    // node_count was tracking the max node ID; +1 to get the actual count
     node_count++;
 }
 
@@ -148,9 +156,6 @@ void print_top_k_ranks()
 //-------------------------------------------------------------------------
 void calculate_pagerank()
 {
-    // Choose the number of threads
-    omp_set_num_threads(8);
-
     int num_threads = 0;
     #pragma omp parallel
     {

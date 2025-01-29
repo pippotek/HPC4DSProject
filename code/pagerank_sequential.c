@@ -32,11 +32,14 @@ int edge_count = 0;     // Tracks the number of edges in the graph
 /**
  * Read edges from a file and populate the 'edges' and 'out_degree' arrays.
  */
+//------------------------------------------------------------------------
+// Read edges from file; update out_degree[] and node_count
+//------------------------------------------------------------------------
 void read_edges(const char *filename) {
-    edges = malloc(sizeof(Edge) * MAX_EDGES);
-    out_degree = calloc(MAX_NODES, sizeof(int));  // calloc initializes all to 0
+    edges = (Edge*) malloc(sizeof(Edge) * MAX_EDGES);
+    out_degree = (int*) calloc(MAX_NODES, sizeof(int));
     if (!edges || !out_degree) {
-        fprintf(stderr, "Memory allocation failed for edges or out_degree\n");
+        fprintf(stderr, "Memory allocation failed\n");
         exit(EXIT_FAILURE);
     }
 
@@ -46,26 +49,35 @@ void read_edges(const char *filename) {
         exit(EXIT_FAILURE);
     }
 
-    while (fscanf(file, "%d %d", &edges[edge_count].from, &edges[edge_count].to) == 2) {
-        int from = edges[edge_count].from;
-        int to   = edges[edge_count].to;
-
-        if (from >= MAX_NODES || to >= MAX_NODES) {
-            fprintf(stderr, "Node id exceeds maximum allowed value.\n");
-            exit(EXIT_FAILURE);
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        // Ignore lines starting with '#'
+        if (line[0] == '#') {
+            continue;
         }
 
-        out_degree[from]++;
+        int from, to;
+        if (sscanf(line, "%d %d", &from, &to) == 2) {
+            if (from >= MAX_NODES || to >= MAX_NODES) {
+                fprintf(stderr, "Node id exceeds maximum allowed value.\n");
+                exit(EXIT_FAILURE);
+            }
 
-        // Track highest node ID seen, to determine total node_count
-        if (from > node_count) node_count = from;
-        if (to   > node_count) node_count = to;
+            edges[edge_count].from = from;
+            edges[edge_count].to = to;
 
-        edge_count++;
+            out_degree[from]++;
+
+            // Track highest node ID to compute node_count
+            if (from > node_count) node_count = from;
+            if (to > node_count) node_count = to;
+
+            edge_count++;
+        }
     }
     fclose(file);
 
-    // node_count was the max index; increment to get total count
+    // node_count was tracking the max node ID; +1 to get the actual count
     node_count++;
 }
 

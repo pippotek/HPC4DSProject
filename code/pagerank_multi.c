@@ -46,22 +46,31 @@ void read_edges(const char *filename) {
         exit(EXIT_FAILURE);
     }
 
-    while (fscanf(file, "%d %d", &edges[edge_count].from, &edges[edge_count].to) == 2) {
-        int from = edges[edge_count].from;
-        int to   = edges[edge_count].to;
-
-        if (from >= MAX_NODES || to >= MAX_NODES) {
-            fprintf(stderr, "Node id exceeds maximum allowed value.\n");
-            exit(EXIT_FAILURE);
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        // Ignore lines starting with '#'
+        if (line[0] == '#') {
+            continue;
         }
 
-        out_degree[from]++;
+        int from, to;
+        if (sscanf(line, "%d %d", &from, &to) == 2) {
+            if (from >= MAX_NODES || to >= MAX_NODES) {
+                fprintf(stderr, "Node id exceeds maximum allowed value.\n");
+                exit(EXIT_FAILURE);
+            }
 
-        // Track highest node ID to compute node_count
-        if (from > node_count) node_count = from;
-        if (to   > node_count) node_count = to;
+            edges[edge_count].from = from;
+            edges[edge_count].to = to;
 
-        edge_count++;
+            out_degree[from]++;
+
+            // Track highest node ID to compute node_count
+            if (from > node_count) node_count = from;
+            if (to > node_count) node_count = to;
+
+            edge_count++;
+        }
     }
     fclose(file);
 
@@ -145,8 +154,6 @@ void print_top_10_ranks() {
 // Calculate PageRank with dangling-node handling until convergence
 //------------------------------------------------------------------------
 void calculate_pagerank() {
-    // Use 8 threads by default
-    omp_set_num_threads(8);
 
     // Inform about the number of threads
     #pragma omp parallel
