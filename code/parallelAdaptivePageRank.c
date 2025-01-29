@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>
+#include <string.h>
 #include "mpi.h"
 
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
@@ -230,6 +231,37 @@ int count_min_nodes(int *recv_array, int chunk_size){
     return min_node;
 }
 
+void merge_data(int *neigh_array, double *neigh_rank, int *neigh_degree, int *chunk_size, int *recv_array, int neigh_min, int neigh_max, int *max_node, int *min_node){
+
+    *chunk_size = (*chunk_size)*2;
+
+    recv_array = (int *)realloc(recv_array, sizeof(int) * (*chunk_size)/2);
+    memcpy(recv_array+(*chunk_size)/2, neigh_array, sizeof(int) * (*chunk_size)/2);
+
+    for(int i = 0;i<neigh_max-neigh_min+1;i++)
+        out_degree[i]+=neigh_degree[i];
+
+    int new_max = MAX(*max_node, neigh_max);
+    int new_min = MIN(*min_node, neigh_max);
+
+    //Da ottimizzare
+    int *new_rank = (int *)malloc(sizeof(int) * (new_max - new_min + 1));
+
+    for(int i = 0;i<new_max - new_min + 1;i++){
+        if((i > *min_node && i < neigh_min) || (i < *max_node && i > neigh_max)){
+            new_rank[i] = rank[i];
+        }else{
+            if((i > *min_node && i > neigh_min) || (i < *max_node && i < neigh_max)){
+                new_rank[i] = (rank[i - (*min_node != new_min)*(new_min-(*min_node))] + neigh_rank[i - (neigh_min != new_min)*(new_min-neigh_min)])/2; // Occhio a questa formula 
+            }else{
+               new_rank[i] = neigh_rank[i];
+            }
+        }
+    }
+
+    printf("Data successfully merged in rank: %d\n", rankId);
+}
+
 void communicate_pagerank(int *recv_array, int *chunk_size, int neighbour, int *min_node, int *max_node){
     int neigh_min = 0;
     int neigh_max = 0;
@@ -261,36 +293,17 @@ void communicate_pagerank(int *recv_array, int *chunk_size, int neighbour, int *
     free(neigh_degree);
 }
 
-void merge_data(int *neigh_array, double *neigh_rank, int *neigh_degree, int *chunk_size, int *recv_array, int neigh_min, int neigh_max, int *max_node, int *min_node){
+void print_final_ranks(int min_node, int max_node){
+    int node_count = max_node-min_node+1;
 
-    *chunk_size = (*chunk_size)*2
-
-    recv_array = realloc(recv_array, sizeof(int) * chunk_size);
-    memcpy(recv_array+chunk_size/2, neigh_array);
-
-    for(int i = 0;i<neigh_max-neigh_min+1;i++)
-        out_degree[i]+=neigh_degree[i];
-
-    int new_max = MAX(*max_node, neigh_max)
-    int new_min = MIN(*min_node, neigh_max)
-
-    //Da ottimizzare
-    *new_rank = (int *)malloc(sizeof(int) * (new_max - new_min + 1));
-
-    for(int i = 0;i<new_max - new_min + 1;i++){
-        if((i > *min_node && i < neigh_min) || (i < *max_node && i > neigh_max)){
-            new_rank[i] = rank[i];
-        }else{
-            if(i > *min_node && i > neigh_min) || (i < *max_node && i < neigh_max){
-                new_rank[i] = (rank[i - (*min_node != new_min)*(new_min-(*node_min))] + neigh_rank[i - (neigh_min != new_min)*(new_min-neigh_min)])/2 // Occhio a questa formula 
-            }else{
-               new_rank[i] = neigh_rank[i];
-            }
-        }
+    printf("Rank : %d declares final ranks:\n", rankId);
+    for(int i = 0;i<node_count;i++){
+        printf("%d: %d --> %f\n",rankId, (i+min_node), rank[i]);
     }
 
-    printf("Data successfully merged in rank: %d\n", rankId)
+    printf("Rank %d has declared all pageranks\n");
 }
+
 
 int main(int argc, char *argv[]) {
 
@@ -341,12 +354,17 @@ int main(int argc, char *argv[]) {
         }else{
             neighbour = rankId - i;
         }
+        //printf("%ld\n", recv_array);
         communicate_pagerank(recv_array, &chunk_size, neighbour, &min_node, &max_node);
         groupId = groupId / 2;
         printf("Rank : %d is now in group %d\n", rankId, groupId);
-        break;
     }
+
     //print_top_10_ranks();
+    calculate_pagerank(recv_array, chunk_size);
+    printf("Final iteration complete in rank %d, exiting...\n", rankId);
+
+    print_final_ranks(min_node, max_node);
 
     //Free dynamically allocated memory
     if(rankId == 0){
@@ -356,7 +374,6 @@ int main(int argc, char *argv[]) {
     free(out_degree);
     free(temp_rank);
     free(rank);
-    free(recv_array);
 
     MPI_Finalize();
 
