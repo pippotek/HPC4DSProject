@@ -59,22 +59,33 @@ int read_edges(const char *filename) {
         exit(EXIT_FAILURE);
     }
 
-    while (fscanf(file, "%d %d", &edges[edge_count].from, &edges[edge_count].to) == 2) {
-        int from = edges[edge_count].from;
-        int to = edges[edge_count].to;
-
-        if (from >= MAX_NODES || to >= MAX_NODES) {
-            fprintf(stderr, "Node id exceeds maximum allowed value.\n");
-            exit(EXIT_FAILURE);
+    char line[256];
+    while (fgets(line, sizeof(line), file)) {
+        // Ignore lines starting with '#'
+        if (line[0] == '#') {
+            continue;
         }
 
-        out_degree[from]++;
-        
-        if (from > node_count) node_count = from;
-        if (to > node_count) node_count = to;
+        int from, to;
+        if (sscanf(line, "%d %d", &from, &to) == 2) {
+            if (from >= MAX_NODES || to >= MAX_NODES) {
+                fprintf(stderr, "Node id exceeds maximum allowed value.\n");
+                exit(EXIT_FAILURE);
+            }
 
-        edge_count++;
+            edges[edge_count].from = from;
+            edges[edge_count].to = to;
+
+            out_degree[from]++;
+
+            // Track highest node ID to compute node_count
+            if (from > node_count) node_count = from;
+            if (to > node_count) node_count = to;
+
+            edge_count++;
+        }
     }
+
     fclose(file);
 
     edge_array = (int *)malloc(sizeof(int) * edge_count*2);
@@ -85,10 +96,6 @@ int read_edges(const char *filename) {
     }
 
     node_count++;
-    /*for(int i = 0;i<edge_count*2;i+=2){
-        printf("E[%d], E[%d+1] : (%d, %d)\n",i,i, edge_array[i], edge_array[i+1]);
-    }
-    */
     return edge_count;
 }
 
@@ -151,12 +158,29 @@ void calculate_pagerank(int *recv_array, int chunk_size) {
             temp_rank[i] = (1.0 - DAMPING_FACTOR) / node_count;
         }
 
+        // 2) Calculate dangling node contribution
+        double dangling_sum = 0.0;
+        for (int i = 0; i < node_count; i++) {
+            if (out_degree[i] == 0) {
+                dangling_sum += rank[i];
+            }
+        }
+        double dangling_contrib = DAMPING_FACTOR * (dangling_sum / node_count);
+
+        // 3) Distribute dangling contribution to all nodes
+        for (int i = 0; i < node_count; i++) {
+            temp_rank[i] += dangling_contrib;
+        }
+
+
         for (int i = 0; i < chunk_size; i+=2) {
             int from = recv_array[i];
             int to = recv_array[i+1];
 
             if (out_degree[from] > 0) {
                 temp_rank[to] += DAMPING_FACTOR * rank[from] / out_degree[from];
+
+                //printf("%d-%d : %d --> %d, temp %f\n",rankId, iter, from, to, temp_rank[to]);
             }
         }
 
@@ -238,26 +262,36 @@ void merge_data(int *neigh_array, double *neigh_rank, int *neigh_degree, int *ch
     recv_array = (int *)realloc(recv_array, sizeof(int) * (*chunk_size)/2);
     memcpy(recv_array+(*chunk_size)/2, neigh_array, sizeof(int) * (*chunk_size)/2);
 
-    for(int i = 0;i<neigh_max-neigh_min+1;i++)
+    int new_max = MAX(*max_node, neigh_max);
+    int new_min = MIN(*min_node, neigh_min);
+
+    for(int i = new_min;i<new_max;i++)
         out_degree[i]+=neigh_degree[i];
 
-    int new_max = MAX(*max_node, neigh_max);
-    int new_min = MIN(*min_node, neigh_max);
+    printf("Node %d, max: %d, min %d\n",rankId, new_max, new_min);
 
     //Da ottimizzare
-    int *new_rank = (int *)malloc(sizeof(int) * (new_max - new_min + 1));
+    double *new_rank = (double *)malloc(sizeof(double) * (new_max - new_min + 1));
+
 
     for(int i = 0;i<new_max - new_min + 1;i++){
-        if((i > *min_node && i < neigh_min) || (i < *max_node && i > neigh_max)){
+        new_rank[i] = 0;
+        if((i+new_min >= *min_node && i+new_min < neigh_min) || (i+new_min <= *max_node && i+new_min > neigh_max)){
             new_rank[i] = rank[i];
-        }else{
-            if((i > *min_node && i > neigh_min) || (i < *max_node && i < neigh_max)){
-                new_rank[i] = (rank[i - (*min_node != new_min)*(new_min-(*min_node))] + neigh_rank[i - (neigh_min != new_min)*(new_min-neigh_min)])/2; // Occhio a questa formula 
-            }else{
+        }
+        else{
+            if((i+new_min >= *min_node && i+new_min >= neigh_min && i+new_min <= *max_node && i+new_min <= neigh_max)){
+                new_rank[i] = (rank[i - (*min_node != new_min)*(new_min-(*min_node)-1)] + neigh_rank[i - (neigh_min != new_min)*(new_min-neigh_min-1)])/2; // Occhio a questa formula 
+            }
+            else{
                new_rank[i] = neigh_rank[i];
             }
         }
     }
+
+    rank = new_rank;
+    node_count = new_max-new_min+1;
+    printf("%d -- Node count in rank %d\n", node_count, rankId);
 
     printf("Data successfully merged in rank: %d\n", rankId);
 }
@@ -278,8 +312,9 @@ void communicate_pagerank(int *recv_array, int *chunk_size, int neighbour, int *
     int *neigh_degree = (int *)malloc(sizeof(int) * MAX_NODES);
 
     MPI_Sendrecv(recv_array, *chunk_size, MPI_INT, neighbour, COMM, neigh_array, *chunk_size, MPI_INT, neighbour, COMM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    MPI_Sendrecv(out_degree+(*min_node), (*max_node-*min_node + 1), MPI_INT, neighbour, COMM, neigh_degree, (neigh_max - neigh_min + 1), MPI_INT, neighbour, COMM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Sendrecv(out_degree, MAX_NODES, MPI_INT, neighbour, COMM, neigh_degree, MAX_NODES, MPI_INT, neighbour, COMM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     MPI_Sendrecv(rank, (node_count), MPI_DOUBLE, neighbour, COMM, neigh_rank, (neigh_max - neigh_min + 1), MPI_DOUBLE, neighbour, COMM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
 
     printf("Rank : %d recieved from neighbour %d all the data, merging...\n", rankId, neighbour);
 
@@ -287,6 +322,11 @@ void communicate_pagerank(int *recv_array, int *chunk_size, int neighbour, int *
 
     *min_node = MIN(*min_node, neigh_min);
     *max_node = MAX(*max_node, neigh_max);
+
+    printf("Degree Recieved in rank : %d\n", rankId);
+    for(int i = 0;i<*max_node+100;i++){
+        printf("%d, %d --> %d\n",rankId, i+1, neigh_degree[i]);
+    }
 
     free(neigh_array);
     free(neigh_rank);
@@ -301,9 +341,24 @@ void print_final_ranks(int min_node, int max_node){
         printf("%d: %d --> %f\n",rankId, (i+min_node), rank[i]);
     }
 
-    printf("Rank %d has declared all pageranks\n");
+    printf("Rank %d has declared all pageranks\n", rankId);
 }
 
+void check_differences(int node_count){
+
+    if(rankId == 0){
+
+        double *neigh_rank = (double *)malloc(sizeof(double) * node_count);
+        MPI_Recv(neigh_rank, node_count, MPI_DOUBLE, MPI_ANY_SOURCE, COMM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        printf("Differences : \n");
+        for(int i = 0;i< node_count;i++){
+            printf("%d --> %f - %f = %f\n", i+1, rank[i], neigh_rank[i], rank[i]-neigh_rank[i]);
+        }
+    }else{
+        MPI_Send(rank, node_count, MPI_DOUBLE, 0, COMM, MPI_COMM_WORLD);
+    }
+}
 
 int main(int argc, char *argv[]) {
 
@@ -358,24 +413,29 @@ int main(int argc, char *argv[]) {
         communicate_pagerank(recv_array, &chunk_size, neighbour, &min_node, &max_node);
         groupId = groupId / 2;
         printf("Rank : %d is now in group %d\n", rankId, groupId);
+        printf("Rank : %d has now %d elements\n", rankId, max_node-min_node+1);
     }
 
     //print_top_10_ranks();
     calculate_pagerank(recv_array, chunk_size);
     printf("Final iteration complete in rank %d, exiting...\n", rankId);
 
-    print_final_ranks(min_node, max_node);
+    if(rankId == 0)
+        print_final_ranks(min_node, max_node);
+    check_differences(max_node-min_node+1);
+
 
     //Free dynamically allocated memory
     if(rankId == 0){
         free(edges);
         free(edge_array);
     }
+
     free(out_degree);
     free(temp_rank);
     free(rank);
 
     MPI_Finalize();
 
-    return EXIT_SUCCESS;
+    return 0;
 }
