@@ -232,11 +232,15 @@ void calculate_pagerank()
         }
 
         // 5) Merge local contributions into temp_rank (serial merge for consistency)
-        for (int t = 0; t < num_threads; t++) {
-            for (int i = 0; i < node_count; i++) {
-                temp_rank[i] += local_contrib[t][i];
+        #pragma omp parallel for
+        for (int i = 0; i < node_count; i++) {
+            double sum = 0.0;
+            for (int t = 0; t < num_threads; t++) {
+                sum += local_contrib[t][i];
             }
+            temp_rank[i] += sum;
         }
+
 
         // 6) Check for convergence and update rank_array
         double diff = 0.0;

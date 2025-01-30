@@ -1,0 +1,4 @@
+node_count = 124836180, edge_count = 1806067135
+Running PageRank with local per-thread accumulators.
+Converged after 33 iterations (diff = 8.74414e-07)
+PageRank finished in 628.725 seconds.
