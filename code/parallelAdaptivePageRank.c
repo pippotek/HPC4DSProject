@@ -22,25 +22,22 @@ typedef struct {
     int to;
 } Edge;
 
-typedef struct {
-    int node;
-    double rank;
-} NodeRank;
 
 int *out_degree;        // Dynamic array to store the out-degree of each node
+Edge *edges;
 double *rank;           // Dynamic array to store the current rank of each node
-double *temp_rank;      // Dynamic array to store the temporary rank of each node during updates
-NodeRank top_nodes[TOP_K]; // Array to track the top 10 nodes by rank
 int node_count = 0;     // Tracks the number of unique nodes in the graph
 int edge_count = 0;     // Tracks the number of edges in the graph
 int *edge_array;
 int rankId;
+double *temp_rank;
+float *converged_ranks;
 
 // Function to read edges from a file and populate edge and out-degree arrays
 int read_edges(const char *filename) {
 
-    Edge *edges = malloc(sizeof(Edge) * MAX_EDGES);
-    out_degree = calloc(MAX_NODES, sizeof(int)); // calloc initializes all elements to 0
+    Edge *edges =(Edge *)malloc(sizeof(Edge) * MAX_EDGES);
+    out_degree = (int *)calloc(MAX_NODES, sizeof(int)); // calloc initializes all elements to 0
     if (!edges || !out_degree) { // Check if memory allocation was successful
         fprintf(stderr, "Memory allocation failed\n");
         exit(EXIT_FAILURE);
@@ -94,9 +91,8 @@ int read_edges(const char *filename) {
 
 // Function to initialize the ranks of all nodes and the top nodes array
 void initialize_ranks() {
-    rank = malloc(sizeof(double) * node_count);
-    temp_rank = malloc(sizeof(double) * node_count);
-    if (!rank || !temp_rank) {
+    rank = (double *)malloc(sizeof(double) * node_count);
+    if (!rank) {
         fprintf(stderr, "Memory allocation failed\n");
         exit(EXIT_FAILURE);
     }
@@ -105,46 +101,12 @@ void initialize_ranks() {
     for (int i = 0; i < node_count; i++) {
         rank[i] = initial_rank;
     }
-
-    for (int i = 0; i < TOP_K; i++) {
-        top_nodes[i].node = -1;
-        top_nodes[i].rank = -1.0;
-    }
-}
-
-// Helper function to check if a node is in the top nodes
-int is_in_top_nodes(int node) {
-    for (int i = 0; i < TOP_K; i++) {
-        if (top_nodes[i].node == node) {
-            return 1; // Node is already in the top list
-        }
-    }
-    return 0;
-}
-
-// Function to update the top nodes with the given node and its rank
-void update_top_nodes(int node, double rank_value) {
-    // Skip if the node is already in the top list
-    if (is_in_top_nodes(node)) return;
-
-    // Find the position of the minimum rank in top_nodes
-    int min_index = 0;
-    for (int i = 1; i < TOP_K; i++) {
-        if (top_nodes[i].rank < top_nodes[min_index].rank) {
-            min_index = i;
-        }
-    }
-
-    // Update the top_nodes array only if the current rank is higher than the minimum
-    if (rank_value > top_nodes[min_index].rank || top_nodes[min_index].node == -1) {
-        top_nodes[min_index].node = node;
-        top_nodes[min_index].rank = rank_value;
-    }
 }
 
 // Function to calculate PageRank iteratively until convergence or max iterations
-void calculate_pagerank(int *recv_array, int chunk_size) {
+void calculate_pagerank(int *recv_array, int chunk_size, int min_node) {
     clock_t start_time = clock();
+    double * temp_rank = (double *)malloc(sizeof(double) * node_count);
 
     for (int iter = 0; iter < MAX_ITER; iter++) {
         printf("Rank: %d at iteration %d\n", rankId, iter);
@@ -164,6 +126,7 @@ void calculate_pagerank(int *recv_array, int chunk_size) {
         // 3) Distribute dangling contribution to all nodes
         for (int i = 0; i < node_count; i++) {
             temp_rank[i] += dangling_contrib;
+            converged_ranks[i] = (float)temp_rank[i];
         }
 
         for (int i = 0; i < chunk_size; i+=2) {
@@ -171,8 +134,8 @@ void calculate_pagerank(int *recv_array, int chunk_size) {
             int to = recv_array[i+1];
                         
             if (out_degree[from] > 0) {
-                temp_rank[to] += DAMPING_FACTOR * rank[from] / out_degree[from];
-
+                temp_rank[to-min_node] += DAMPING_FACTOR * rank[from-min_node] / out_degree[from];
+                converged_ranks[to] = fabs((temp_rank[to-min_node] - rank[to-min_node]));
             }
         }
 
@@ -180,9 +143,6 @@ void calculate_pagerank(int *recv_array, int chunk_size) {
         for (int i = 0; i < node_count; i++) {
             diff += fabs(temp_rank[i] - rank[i]);
             rank[i] = temp_rank[i];
-            
-            // Update the top nodes with the new rank value
-            update_top_nodes(i, rank[i]);
         }
 
         if (diff < TOLERANCE) {
@@ -190,31 +150,10 @@ void calculate_pagerank(int *recv_array, int chunk_size) {
             break;
         }
     }
-
     clock_t end_time = clock();
     double time_taken = (double)(end_time - start_time) / CLOCKS_PER_SEC;
-    //printf("Time taken to converge: %.6f seconds\n", time_taken);
-}
-
-// Function to print the top 10 nodes by PageRank
-void print_top_10_ranks() {
-    printf("Top 10 nodes by PageRank in node %d:\n", rankId);
-
-    // Sort the top_nodes array for displaying in descending order
-    for (int i = 0; i < TOP_K - 1; i++) {
-        for (int j = i + 1; j < TOP_K; j++) {
-            if (top_nodes[j].rank > top_nodes[i].rank) {
-                NodeRank temp = top_nodes[i];
-                top_nodes[i] = top_nodes[j];
-                top_nodes[j] = temp;
-            }
-        }
-    }
-
-    // Print the sorted top nodes
-    for (int i = 0; i < TOP_K && top_nodes[i].node != -1; i++) {
-        printf("Node %d: %.6f\n", top_nodes[i].node, top_nodes[i].rank);
-    }
+    free(temp_rank);
+    printf("Time taken to converge: %.6f seconds\n", time_taken);
 }
 
 void count_statistics(int *recv_array, int chunk_size, int *max_node, int *min_node, int halfed){
@@ -243,10 +182,16 @@ int *merge_data(int *neigh_array, double *neigh_rank, int *chunk_size, int *recv
 
     (*chunk_size)*=2;
 
-    recv_array = reallocarray(recv_array, *chunk_size, sizeof(int));
-    //memcpy(recv_array+((*chunk_size)/2)*sizeof(int), neigh_array, sizeof(int) * ((*chunk_size)/2));
-    for(int i = *chunk_size/2;i<*chunk_size;i++){
-        recv_array[i] = neigh_array[i-*chunk_size/2];
+    int *new_array = (int *)malloc(sizeof(int)*(*chunk_size));
+    for(int i = 0;i<*chunk_size;i+=2){
+        if(i>=*chunk_size/2){
+            new_array[i] = neigh_array[i-(*chunk_size)/2];
+            new_array[i+1] = neigh_array[i-(*chunk_size)/2+1];
+        }
+        if(i<*chunk_size/2){
+            new_array[i] = recv_array[i];
+            new_array[i+1] = recv_array[i+1];
+        }
     }
     
     int new_max = MAX(*max_node, neigh_max);
@@ -256,15 +201,16 @@ int *merge_data(int *neigh_array, double *neigh_rank, int *chunk_size, int *recv
 
     //Da ottimizzare
     double *new_rank = (double *)malloc(sizeof(double) * (new_max - new_min + 1));
-
-    for(int i = 0;i<new_max - new_min + 1;i++){
+    for(int i = 0;i<new_max - new_min+1 ;i++){
         new_rank[i] = 0;
         if((i+new_min >= *min_node && i+new_min < neigh_min) || (i+new_min <= *max_node && i+new_min > neigh_max)){
             new_rank[i] = rank[i];
         }
         else{
             if((i+new_min >= *min_node && i+new_min >= neigh_min && i+new_min <= *max_node && i+new_min <= neigh_max)){
-                new_rank[i] = (rank[i - (*min_node != new_min)*(new_min-(*min_node)-1)] + neigh_rank[i - (neigh_min != new_min)*(new_min-neigh_min-1)])/2; // Occhio a questa formula 
+                double my_rank = rank[i + (*min_node != new_min)*(new_min-(*min_node))];
+                double neigh = neigh_rank[i + (neigh_min != new_min)*(new_min-neigh_min)];
+                new_rank[i] = (my_rank + neigh)/2;
             }
             else{
                new_rank[i] = neigh_rank[i];
@@ -272,13 +218,14 @@ int *merge_data(int *neigh_array, double *neigh_rank, int *chunk_size, int *recv
         }
     }
 
-    count_statistics(recv_array, *chunk_size, max_node, min_node, 1); 
+    count_statistics(new_array, *chunk_size, max_node, min_node, 1); 
 
-
+    node_count = new_max-new_min;
     rank = new_rank;
-    node_count = new_max-new_min+1;
+ 
+    free(recv_array);
     printf("Data successfully merged in rank: %d\n", rankId);
-    return recv_array;
+    return new_array;
 }
 
 int *communicate_pagerank(int *recv_array, int *chunk_size, int neighbour, int *min_node, int *max_node){
@@ -308,7 +255,6 @@ int *communicate_pagerank(int *recv_array, int *chunk_size, int neighbour, int *
     MPI_Irecv(neigh_rank, (neigh_max - neigh_min + 1), MPI_DOUBLE, neighbour, COMM, MPI_COMM_WORLD, req+3);
 
     MPI_Waitall(4, req, stat);
-
     printf("Rank : %d recieved from neighbour %d all the data, merging...\n", rankId, neighbour);
 
     recv_array = merge_data(neigh_array, neigh_rank, chunk_size, recv_array, neigh_min, neigh_max, max_node, min_node);
@@ -319,9 +265,7 @@ int *communicate_pagerank(int *recv_array, int *chunk_size, int neighbour, int *
     return recv_array;
 }
 
-void print_final_ranks(int min_node, int max_node){
-    int node_count = max_node-min_node+1;
-
+void print_final_ranks(int min_node){
     printf("Rank : %d declares final ranks:\n", rankId);
     for(int i = 0;i<node_count;i++){
         printf("%d: %d --> %f\n",rankId, (i+min_node), rank[i]);
@@ -330,25 +274,9 @@ void print_final_ranks(int min_node, int max_node){
     printf("Rank %d has declared all pageranks\n", rankId);
 }
 
-void check_differences(int node_count){
-
-    if(rankId == 0){
-
-        double *neigh_rank = (double *)malloc(sizeof(double) * node_count);
-        MPI_Recv(neigh_rank, node_count, MPI_DOUBLE, MPI_ANY_SOURCE, COMM, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-        printf("Differences : \n");
-        for(int i = 0;i< node_count;i++){
-            printf("%d --> %f - %f = %f\n", i+1, rank[i], neigh_rank[i], rank[i]-neigh_rank[i]);
-        }
-    }else{
-        MPI_Send(rank, node_count, MPI_DOUBLE, 0, COMM, MPI_COMM_WORLD);
-    }
-}
-
 int main(int argc, char *argv[]) {
 
-    MPI_Init(NULL, NULL);
+    MPI_Init(&argc, &argv);
 
     int size, chunk_size, problemDim, neighbour, groupId;
     
@@ -368,11 +296,14 @@ int main(int argc, char *argv[]) {
     }
 
     out_degree = (int *)calloc(MAX_NODES, sizeof(int));
+    converged_ranks = (float *)calloc(MAX_NODES, sizeof(float));
 
     MPI_Bcast(&chunk_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
+    printf("Scattering\n");
     int *recv_array = (int *)malloc(sizeof(int) * chunk_size);
     MPI_Scatter(edge_array, chunk_size, MPI_INT, recv_array, chunk_size, MPI_INT, 0, MPI_COMM_WORLD);
+    printf("Scatter ended\n");
 
     int max_node = 0;
     int min_node = 0;
@@ -383,29 +314,30 @@ int main(int argc, char *argv[]) {
 
     initialize_ranks();
     for(int i = 1;i<size;i*=2){
-        calculate_pagerank(recv_array, chunk_size);
+        calculate_pagerank(recv_array, chunk_size, min_node);
         if(groupId % 2 == 0){
             neighbour = rankId + i;
         }else{
             neighbour = rankId - i;
         }
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        printf("----Rank %d over the barrier with size : %d----\n",rankId, i);
         recv_array = communicate_pagerank(recv_array, &chunk_size, neighbour, &min_node, &max_node);
 
         groupId = groupId / 2;
         node_count = max_node-min_node+1;
         printf("Rank : %d is now in group %d\n", rankId, groupId);
-        printf("Rank : %d has now %d elements\n", rankId, max_node-min_node+1);
+        printf("Rank : %d has now %d elements\n", rankId, max_node-min_node);
 
         MPI_Barrier(MPI_COMM_WORLD);
     }
 
-    //print_top_10_ranks();
-
-    calculate_pagerank(recv_array, chunk_size);
+    calculate_pagerank(recv_array, chunk_size, min_node);
     printf("Final iteration complete in rank %d, exiting...\n", rankId);
 
     if(rankId == 0)
-        print_final_ranks(min_node, max_node);
+        print_final_ranks(min_node);
 
     //Free dynamically allocated memory
     if(rankId == 0){
@@ -413,12 +345,9 @@ int main(int argc, char *argv[]) {
     }
 
     free(out_degree);
-    free(temp_rank);
     free(rank);
 
     printf("Rank : %d exits...\n", rankId);
 
     MPI_Finalize();
-
-    return 0;
 }
