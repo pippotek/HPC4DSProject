@@ -327,6 +327,7 @@ int main(int argc, char *argv[]) {
             int from = local_edges[i].from;
             int to   = local_edges[i].to;
             if (out_degree[from] > 0) {
+                #pragma omp atomic
                 local_contrib[to] += DAMPING_FACTOR * rank_vals[from] / out_degree[from];
             }
         }
