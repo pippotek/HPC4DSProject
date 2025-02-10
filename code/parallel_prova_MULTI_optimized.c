@@ -332,16 +332,16 @@
             int tid = omp_get_thread_num();
             #pragma omp for schedule(static)
             for (int e = 0; e < edge_count; e++) {
-                int from = edges[e].from;
-                int to   = edges[e].to;
+                int from = local_edges[e].from;
+                int to   = local_edges[e].to;
                 if (out_degree[from] > 0) {
-                    double contrib = (DAMPING_FACTOR * rank_array[from]) / out_degree[from];
+                    double contrib = (DAMPING_FACTOR * rank_vals[from]) / out_degree[from];
                     local_contrib[tid][to] += contrib;
                 }
             }
         }
         
-        double* local_contrib_sum = (double*) malloc(node_count * sizeof(double))
+        double* local_contrib_sum = (double*) calloc(node_count, sizeof(double));
 
         // 5) Merge local contributions into temp_rank
         #pragma omp parallel for
@@ -365,7 +365,7 @@
          
          /* 6) Compute the change (diff) over the local node range */
          double local_diff = 0.0;
-         #pragma omp paralle for reduction(+:local_diff)
+         #pragma omp parallel for reduction(+:local_diff)
          for (int i = local_node_start; i < local_node_end; i++) {
              local_diff += fabs(temp_rank[i] - rank_vals[i]);
          }
