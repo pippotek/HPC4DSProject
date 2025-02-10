@@ -3,7 +3,6 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import glob
-from IPython.display import display
 
 def parse_pagerank_output(file_path, implementation):
     """Parses a PageRank benchmark output file and extracts necessary details."""
@@ -80,7 +79,7 @@ def analyze_pagerank_results(folders, labels):
     plt.xlabel('Number of Threads')
     plt.ylabel('Speedup')
     plt.legend()
-    plt.title('Speedup Comparison (Log scale)')
+    plt.title('OpenMP Speedup Comparison (Log scale)')
     plt.grid(True)
     plt.show()
     
@@ -98,7 +97,7 @@ def analyze_pagerank_results(folders, labels):
     plt.xlabel('Number of Threads')
     plt.ylabel('Efficiency')
     plt.legend()
-    plt.title('Efficiency Comparison (Log scale)')
+    plt.title('OpenMP Efficiency Comparison (Log scale)')
     plt.grid(True)
     plt.show()
     
