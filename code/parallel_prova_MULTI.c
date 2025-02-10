@@ -302,17 +302,17 @@ int main(int argc, char *argv[]) {
     for (int iter = 0; iter < MAX_ITER; iter++) {
         /* 1) Compute the sum of ranks for dangling nodes (nodes with no out links)
          * over the local node range. */
+        /* Compute the sum of ranks for dangling nodes only over the local node range */
         double local_dangling_sum = 0.0;
         #pragma omp parallel for reduction(+:local_dangling_sum)
-        for (int i = 0; i < node_count; i++) {
+        for (int i = local_node_start; i < local_node_end; i++) {
             if (out_degree[i] == 0) {
-                // This node doesn't distribute to anyone, so its rank should
-                // be spread out among all nodes
                 local_dangling_sum += rank_vals[i];
             }
         }
         double global_dangling_sum = 0.0;
         MPI_Allreduce(&local_dangling_sum, &global_dangling_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+
         
         double base_rank = (1.0 - DAMPING_FACTOR) / node_count;
         double dangling_contrib = DAMPING_FACTOR * (global_dangling_sum / node_count);
