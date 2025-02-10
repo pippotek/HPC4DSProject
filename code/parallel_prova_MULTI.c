@@ -322,6 +322,7 @@ int main(int argc, char *argv[]) {
             local_contrib[i] = 0.0;
         }
         /* 3) Process each local edge: add contribution from the source node's rank */
+        #pragma omp parallel for
         for (int i = 0; i < local_edge_count; i++) {
             int from = local_edges[i].from;
             int to   = local_edges[i].to;
@@ -333,12 +334,14 @@ int main(int argc, char *argv[]) {
         MPI_Allreduce(local_contrib, global_contrib, node_count, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
         
         /* 5) Combine the base, dangling, and edge contributions to update rank */
+        #pragma omp parallel for
         for (int i = 0; i < node_count; i++) {
             temp_rank[i] = base_rank + dangling_contrib + global_contrib[i];
         }
         
         /* 6) Compute the change (diff) over the local node range */
         double local_diff = 0.0;
+        #pragma omp paralle for reduction(+:local_diff)
         for (int i = local_node_start; i < local_node_end; i++) {
             local_diff += fabs(temp_rank[i] - rank_vals[i]);
         }
@@ -346,6 +349,7 @@ int main(int argc, char *argv[]) {
         MPI_Allreduce(&local_diff, &global_diff, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
         
         /* 7) Update the rank vector */
+        #pragma omp parallel for
         for (int i = 0; i < node_count; i++) {
             rank_vals[i] = temp_rank[i];
         }
