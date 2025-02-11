@@ -1,12 +1,14 @@
 /******************************************************************************
- * Parallel MPI  PageRank Implementation
+ * Parallel MPI PageRank Implementation
  *
- * This code reads an edge-list file (skipping comment lines beginning with '#'),
- * computes the PageRank scores in parallel using MPI, and then prints the top
- * 10 nodes by rank.
+ * Revised and corrected code. Notable changes:
+ *   - In the edge contribution loop, iterate over local_edge_count (not edge_count)
+ *   - Free the temporary local_contrib_sum array in every iteration to avoid memory leaks
+ *   - Properly free each thread-local contribution array (local_contrib[t]) before
+ *     freeing the local_contrib pointer array
  *
  * Compile with (for example):
- *     mpicc -O3 -o mpi_pagerank mpi_pagerank.c -lm
+ *     mpicc -O3 -o mpi_pagerank mpi_pagerank.c -lm -fopenmp
  *
  * Run with (for example):
  *     mpirun -np 4 ./mpi_pagerank graph.txt
@@ -38,7 +40,6 @@
      int node;
      double rank;
  } NodeRank;
- 
  
  /* ============================ Utility Functions ============================ */
  
@@ -90,11 +91,11 @@
   * from file, builds the global edge array and computes the out-degree of each node.
   *
   * Parameters:
-  *   filename      - the name of the edge list file.
-  *   edges_ptr     - pointer to the (allocated) edge array.
-  *   edge_count_ptr- pointer to the number of edges found.
-  *   node_count_ptr- pointer to the total number of nodes (assumed to be max_node_id+1).
-  *   out_degree_ptr- pointer to the (allocated) out-degree array.
+  *   filename       - the name of the edge list file.
+  *   edges_ptr      - pointer to the (allocated) edge array.
+  *   edge_count_ptr - pointer to the number of edges found.
+  *   node_count_ptr - pointer to the total number of nodes (assumed to be max_node_id+1).
+  *   out_degree_ptr - pointer to the (allocated) out-degree array.
   */
  void read_edges(const char *filename, Edge **edges_ptr, int *edge_count_ptr, int *node_count_ptr, int **out_degree_ptr) {
      Edge *edges = (Edge *) malloc(sizeof(Edge) * MAX_EDGES);
@@ -138,7 +139,7 @@
      fclose(file);
      
      int node_count = max_node + 1;
-     *edges_ptr     = edges;
+     *edges_ptr      = edges;
      *edge_count_ptr = edge_count;
      *node_count_ptr = node_count;
      *out_degree_ptr = out_degree;
@@ -265,19 +266,17 @@
      /* --- Allocate temporary contribution vectors (of length node_count) ---
       * Each process will compute contributions from its local edges into a local
       * vector and then the vectors are summed with MPI_Allreduce. */
-    int num_threads = 0;
-
-    #pragma omp parallel
-    {
-        #pragma omp master
-        {
-            num_threads = omp_get_num_threads();
-        }
-    }
-
-    printf("PageRank will run with %d threads per process.\n", num_threads);
-
-
+     int num_threads = 0;
+     #pragma omp parallel
+     {
+         #pragma omp master
+         {
+             num_threads = omp_get_num_threads();
+         }
+     }
+     
+     printf("Process %d: PageRank will run with %d threads per process.\n", mpi_rank, num_threads);
+     
      double **local_contrib = (double**) malloc(num_threads * sizeof(double*));
      if (!local_contrib) {
          fprintf(stderr, "Failed to allocate local_contrib.\n");
@@ -290,20 +289,19 @@
              exit(EXIT_FAILURE);
          }
      }
-
+     
      double *global_contrib = (double *) malloc(sizeof(double) * node_count);
-     if (!local_contrib || !global_contrib) {
-         fprintf(stderr, "Memory allocation failed for contribution vectors on process %d\n", mpi_rank);
+     if (!global_contrib) {
+         fprintf(stderr, "Memory allocation failed for global_contrib on process %d\n", mpi_rank);
          MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
      }
- 
+     
      
      /* --- Begin PageRank iterations --- */
      start_time = MPI_Wtime();
      for (int iter = 0; iter < MAX_ITER; iter++) {
          /* 1) Compute the sum of ranks for dangling nodes (nodes with no out links)
           * over the local node range. */
-         /* Compute the sum of ranks for dangling nodes only over the local node range */
          double local_dangling_sum = 0.0;
          #pragma omp parallel for reduction(+:local_dangling_sum)
          for (int i = local_node_start; i < local_node_end; i++) {
@@ -313,57 +311,62 @@
          }
          double global_dangling_sum = 0.0;
          MPI_Allreduce(&local_dangling_sum, &global_dangling_sum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
- 
          
          double base_rank = (1.0 - DAMPING_FACTOR) / node_count;
          double dangling_contrib = DAMPING_FACTOR * (global_dangling_sum / node_count);
          
-         // 3) Zero out local_contrib arrays
-        #pragma omp parallel for schedule(static)
-        for (int t = 0; t < num_threads; t++) {
-            for (int i = 0; i < node_count; i++) {
-                local_contrib[t][i] = 0.0;
-            }
-        }
-        
-        // 4) Accumulate edge contributions in thread-local arrays
-        #pragma omp parallel
-        {
-            int tid = omp_get_thread_num();
-            #pragma omp for schedule(static)
-            for (int e = 0; e < edge_count; e++) {
-                int from = local_edges[e].from;
-                int to   = local_edges[e].to;
-                if (out_degree[from] > 0) {
-                    double contrib = (DAMPING_FACTOR * rank_vals[from]) / out_degree[from];
-                    local_contrib[tid][to] += contrib;
-                }
-            }
-        }
-        
-        double* local_contrib_sum = (double*) calloc(node_count, sizeof(double));
-
-        // 5) Merge local contributions into temp_rank
-        #pragma omp parallel for
-        for (int i = 0; i < node_count; i++) {
-            double sum = 0.0;
-            for (int t = 0; t < num_threads; t++) {
-                sum += local_contrib[t][i];
-            }
-            local_contrib_sum[i] += sum;
-        }
-
-
-         /* 4) Sum all the per-edge contributions across processes */
+         /* 2) Zero out local_contrib arrays */
+         #pragma omp parallel for schedule(static)
+         for (int t = 0; t < num_threads; t++) {
+             for (int i = 0; i < node_count; i++) {
+                 local_contrib[t][i] = 0.0;
+             }
+         }
+         
+         /* 3) Accumulate edge contributions in thread-local arrays */
+         #pragma omp parallel
+         {
+             int tid = omp_get_thread_num();
+             /* Iterate only over the edges local to this process */
+             #pragma omp for schedule(static)
+             for (int e = 0; e < local_edge_count; e++) {  // Fixed: use local_edge_count here!
+                 int from = local_edges[e].from;
+                 int to   = local_edges[e].to;
+                 if (out_degree[from] > 0) {
+                     double contrib = (DAMPING_FACTOR * rank_vals[from]) / out_degree[from];
+                     local_contrib[tid][to] += contrib;
+                 }
+             }
+         }
+         
+         /* 4) Merge local contributions into a single array */
+         double* local_contrib_sum = (double*) calloc(node_count, sizeof(double));
+         if (!local_contrib_sum) {
+             fprintf(stderr, "Memory allocation failed for local_contrib_sum on process %d\n", mpi_rank);
+             MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
+         }
+         #pragma omp parallel for
+         for (int i = 0; i < node_count; i++) {
+             double sum = 0.0;
+             for (int t = 0; t < num_threads; t++) {
+                 sum += local_contrib[t][i];
+             }
+             local_contrib_sum[i] = sum;
+         }
+         
+         /* 5) Sum all the per-edge contributions across processes */
          MPI_Allreduce(local_contrib_sum, global_contrib, node_count, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
          
-         /* 5) Combine the base, dangling, and edge contributions to update rank */
+         /* Free the temporary local_contrib_sum array to avoid memory leak */
+         free(local_contrib_sum);
+         
+         /* 6) Combine the base, dangling, and edge contributions to update rank */
          #pragma omp parallel for
          for (int i = 0; i < node_count; i++) {
              temp_rank[i] = base_rank + dangling_contrib + global_contrib[i];
          }
          
-         /* 6) Compute the change (diff) over the local node range */
+         /* 7) Compute the change (diff) over the local node range */
          double local_diff = 0.0;
          #pragma omp parallel for reduction(+:local_diff)
          for (int i = local_node_start; i < local_node_end; i++) {
@@ -372,7 +375,7 @@
          double global_diff = 0.0;
          MPI_Allreduce(&local_diff, &global_diff, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
          
-         /* 7) Update the rank vector */
+         /* 8) Update the rank vector */
          #pragma omp parallel for
          for (int i = 0; i < node_count; i++) {
              rank_vals[i] = temp_rank[i];
@@ -408,9 +411,14 @@
      free(local_edges);
      free(rank_vals);
      free(temp_rank);
-     free(local_contrib);
      free(global_contrib);
      free(out_degree);
+     
+     /* Free each thread-local contribution array */
+     for (int t = 0; t < num_threads; t++) {
+         free(local_contrib[t]);
+     }
+     free(local_contrib);
      
      MPI_Type_free(&MPI_EDGE);
      MPI_Finalize();
