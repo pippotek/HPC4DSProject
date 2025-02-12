@@ -34,7 +34,7 @@ Iteration 31: diff = 0.0000018151
 Iteration 32: diff = 0.0000012674
 Iteration 33: diff = 0.0000008744
 Converged after 33 iterations
-Time taken to converge: 4642.027642 seconds
+Time taken to converge: 2729.566035 seconds
 Top 10 nodes by PageRank:
 Node 124511661: 0.0000374088
 Node 124242676: 0.0000262346

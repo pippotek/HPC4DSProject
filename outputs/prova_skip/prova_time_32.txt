@@ -1,0 +1,30 @@
+Number of edges: 450000000
+Number of nodes: 124833694
+time for reduce in iteration 0 : 6.701666Iteration 1: diff = 0.0655774304
+time for reduce in iteration 1 : 7.652410Iteration 2: diff = 0.0240428869
+time for reduce in iteration 2 : 8.048994Iteration 3: diff = 0.0088786360
+time for reduce in iteration 3 : 8.751882Iteration 4: diff = 0.0033546043
+time for reduce in iteration 4 : 8.925356Iteration 5: diff = 0.0013231907
+time for reduce in iteration 5 : 7.826404Iteration 6: diff = 0.0005406794
+time for reduce in iteration 6 : 8.419563Iteration 7: diff = 0.0002287795
+time for reduce in iteration 7 : 7.038309Iteration 8: diff = 0.0000999956
+time for reduce in iteration 8 : 7.489450Iteration 9: diff = 0.0000451172
+time for reduce in iteration 9 : 7.839238Iteration 10: diff = 0.0000209557
+time for reduce in iteration 10 : 8.234159Iteration 11: diff = 0.0000099973
+time for reduce in iteration 11 : 6.757454Iteration 12: diff = 0.0000048924
+time for reduce in iteration 12 : 7.260217Iteration 13: diff = 0.0000024505
+time for reduce in iteration 13 : 7.212795Iteration 14: diff = 0.0000012530
+time for reduce in iteration 14 : 7.355094Iteration 15: diff = 0.0000006521
+Converged after 15 iterations
+Time taken to converge: 159.756987 seconds
+Top 10 nodes by PageRank:
+Node 14039181: 0.0000011040
+Node 2905057: 0.0000009474
+Node 20028964: 0.0000007962
+Node 9861480: 0.0000007952
+Node 3356091: 0.0000007096
+Node 11376778: 0.0000006801
+Node 14849622: 0.0000006662
+Node 4355536: 0.0000006635
+Node 2089989: 0.0000006510
+Node 78066397: 0.0000006326
