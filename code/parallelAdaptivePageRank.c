@@ -100,7 +100,7 @@ int parprocess(MPI_File *in, int size, const int overlap, int *recv_array) {
         filesize--;  /* get rid of text file eof */
 
         mysize = filesize/size;
-        globalstart = rankId * mysize;
+        globalstart = rankId * mysize + 128;
         globalend   = globalstart + mysize - 1;
         if (rankId == size-1) globalend = filesize;
     
