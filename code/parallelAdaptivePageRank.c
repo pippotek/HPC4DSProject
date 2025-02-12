@@ -3,12 +3,13 @@
 #include <math.h>
 #include <time.h>
 #include <string.h>
+#include <omp.h>
 #include "mpi.h"
 
 #define MAX(a,b) ((a) > (b) ? (a) : (b))
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
-#define MAX_NODES 2000000000      // Maximum number of nodes in the graph
+#define MAX_NODES 2000000000     // Maximum number of nodes in the graph
 #define MAX_EDGES 2000000000      // Maximum number of edges in the graph
 #define DAMPING_FACTOR 0.85       // Damping factor for PageRank calculation
 #define MAX_ITER 100              // Maximum number of iterations for convergence
@@ -31,17 +32,10 @@ int edge_count = 0;     // Tracks the number of edges in the graph
 int *edge_array;
 int rankId;
 double *temp_rank;
-float *converged_ranks;
 
 // Function to read edges from a file and populate edge and out-degree arrays
-int read_edges(const char *filename) {
+int read_edges(const char *filename) { 
 
-    Edge *edges =(Edge *)malloc(sizeof(Edge) * MAX_EDGES);
-    out_degree = (int *)calloc(MAX_NODES, sizeof(int)); // calloc initializes all elements to 0
-    if (!edges || !out_degree) { // Check if memory allocation was successful
-        fprintf(stderr, "Memory allocation failed\n");
-        exit(EXIT_FAILURE);
-    }
 
     FILE *file = fopen(filename, "r");
     if (!file) {
@@ -105,7 +99,7 @@ int parprocess(MPI_File *in, int size, const int overlap, int *recv_array) {
         MPI_File_get_size(*in, &filesize);
         filesize--;  /* get rid of text file eof */
 
-        mysize = filesize/size + filesize%size;
+        mysize = filesize/size;
         globalstart = rankId * mysize;
         globalend   = globalstart + mysize - 1;
         if (rankId == size-1) globalend = filesize;
@@ -120,9 +114,12 @@ int parprocess(MPI_File *in, int size, const int overlap, int *recv_array) {
         chunk = malloc( (mysize + 1)*sizeof(char));
     
         /* everyone reads in their part */
-        MPI_File_read_at_all(*in, globalstart, chunk, mysize, MPI_CHAR, MPI_STATUS_IGNORE);
+        if(MPI_File_read_at_all(*in, globalstart, chunk, mysize, MPI_CHAR, MPI_STATUS_IGNORE) == -1){
+            printf("Rank : %d failed", rankId);
+        }
         chunk[mysize] = '\0';
     
+        printf("Reading the file\n");
     
     /*
      * everyone calculate what their start and end *really* are by going 
@@ -134,6 +131,7 @@ int parprocess(MPI_File *in, int size, const int overlap, int *recv_array) {
     if (rankId != 0) {
         while(chunk[locstart++] != '\n');
     }
+
     if (rankId != size-1) {
         locend-=overlap;
         while(chunk[locend] != '\n') locend++;
@@ -151,7 +149,6 @@ int parprocess(MPI_File *in, int size, const int overlap, int *recv_array) {
 
         true_size = neigh_beginning - globalstart + 1;
     }
-
     
     if(rankId != size-1){
         locend = neigh_beginning - 1;
@@ -165,6 +162,8 @@ int parprocess(MPI_File *in, int size, const int overlap, int *recv_array) {
 
    int line_counter = 0;
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    printf("After Barrier\n");
     
    char *line = strtok(chunk, "\n");
     while (line) {
@@ -177,15 +176,15 @@ int parprocess(MPI_File *in, int size, const int overlap, int *recv_array) {
     }
 
     
-    
     return line_counter;
 }
 
 // Function to initialize the ranks of all nodes and the top nodes array
 void initialize_ranks() {
+    printf("Node count: %d\n",node_count);
     rank = (double *)malloc(sizeof(double) * node_count);
     if (!rank) {
-        fprintf(stderr, "Memory allocation failed\n");
+        fprintf(stderr, "Memory allocation of rank failed\n");
         exit(EXIT_FAILURE);
     }
     
@@ -217,7 +216,6 @@ void calculate_pagerank(int *recv_array, int chunk_size, int min_node) {
         // 3) Distribute dangling contribution to all nodes
         for (int i = 0; i < node_count; i++) {
             temp_rank[i] += dangling_contrib;
-            converged_ranks[i] = (float)temp_rank[i];
         }
 
         //Possibile Vettorizzazione o parallelismo
@@ -226,7 +224,6 @@ void calculate_pagerank(int *recv_array, int chunk_size, int min_node) {
             int to = recv_array[i+1];
                         
             temp_rank[to-min_node] += DAMPING_FACTOR * rank[from-min_node] / out_degree[from];
-            converged_ranks[to] = fabs((temp_rank[to-min_node] - rank[to-min_node]));
         }
 
         double diff = 0;
@@ -308,7 +305,7 @@ int *merge_data(int *neigh_array, double *neigh_rank, int *edge_count, int neigh
         }
     }
 
-    count_statistics(new_array, *edge_count, max_node, min_node, 1); 
+    count_statistics(new_array, *edge_count, max_node, min_node, 0); 
 
     node_count = new_max-new_min;
     rank = new_rank;
@@ -388,20 +385,21 @@ int main(int argc, char *argv[]) {
     }
 
     out_degree = (int *)calloc(MAX_NODES, sizeof(int));
-    converged_ranks = (float *)calloc(MAX_NODES, sizeof(float));
 
     MPI_File_open(MPI_COMM_WORLD, argv[1], MPI_MODE_RDONLY, MPI_INFO_NULL, &in);
 
-    printf("Scattering\n");
     int *recv_array = (int *)malloc(sizeof(int) * MAX_NODES);
     int edge_count = parprocess(&in, size, 10, recv_array);
+    printf("Beginning pageRank\n");
 
     int max_node = 0;
     int min_node = 0;
+    printf("Edge_count is %d\n", edge_count);
 
     count_statistics(recv_array, edge_count, &max_node, &min_node, 0);
 
     node_count = max_node-min_node+1;
+    printf("Node count in rank %d is %d\n", min_node, max_node);
 
     initialize_ranks();
     for(int i = 1;i<size;i*=2){
@@ -412,6 +410,7 @@ int main(int argc, char *argv[]) {
             neighbour = rankId - i;
         }
 
+        printf("Rank %d beginning communication\n",rankId);
         recv_array = communicate_pagerank(recv_array, &edge_count, neighbour, &min_node, &max_node);
 
         groupId = groupId / 2;
