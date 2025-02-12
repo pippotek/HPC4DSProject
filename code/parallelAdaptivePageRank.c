@@ -89,6 +89,98 @@ int read_edges(const char *filename) {
     return edge_count;
 }
 
+int parprocess(MPI_File *in, int size, const int overlap, int *recv_array) {
+    MPI_Offset globalstart;
+    int mysize;
+    char *chunk;
+    
+    /* read in relevant chunk of file into "chunk",
+     * which starts at location in the file globalstart
+     * and has size mysize 
+     */
+        MPI_Offset globalend;
+        MPI_Offset filesize;
+    
+        /* figure out who reads what */
+        MPI_File_get_size(*in, &filesize);
+        filesize--;  /* get rid of text file eof */
+
+        mysize = filesize/size + filesize%size;
+        globalstart = rankId * mysize;
+        globalend   = globalstart + mysize - 1;
+        if (rankId == size-1) globalend = filesize;
+    
+        /* add overlap to the end of everyone's chunk except last proc... */
+        if (rankId != size-1)
+            globalend += overlap;
+    
+        mysize =  globalend - globalstart + 1;
+    
+        /* allocate memory */
+        chunk = malloc( (mysize + 1)*sizeof(char));
+    
+        /* everyone reads in their part */
+        MPI_File_read_at_all(*in, globalstart, chunk, mysize, MPI_CHAR, MPI_STATUS_IGNORE);
+        chunk[mysize] = '\0';
+    
+    
+    /*
+     * everyone calculate what their start and end *really* are by going 
+     * from the first newline after start to the first newline after the
+     * overlap region starts (eg, after end - overlap + 1)
+     */
+    
+    int locstart=0, locend=mysize;
+    if (rankId != 0) {
+        while(chunk[locstart++] != '\n');
+    }
+    if (rankId != size-1) {
+        locend-=overlap;
+        while(chunk[locend] != '\n') locend++;
+    }
+
+    int true_start = (globalstart + locstart);
+    int neigh_beginning = 0;
+    int true_size = 0;
+
+    if(rankId != 0)
+        MPI_Send(&true_start, 1, MPI_INT, rankId-1, 1, MPI_COMM_WORLD);
+
+    if(rankId != size-1){
+        MPI_Recv(&neigh_beginning, 1, MPI_INT, rankId+1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+        true_size = neigh_beginning - globalstart + 1;
+    }
+
+    
+    if(rankId != size-1){
+        locend = neigh_beginning - 1;
+        chunk[true_size] = '\0';
+    }
+    mysize = locend-locstart+1;
+    
+    /* "Process" our chunk by replacing non-space characters with '1' for
+     * rank 1, '2' for rank 2, etc... 
+     */
+
+   int line_counter = 0;
+
+    
+   char *line = strtok(chunk, "\n");
+    while (line) {
+        int from, to;
+        if (sscanf(line, "%d %d", &from, &to) == 2) {
+            recv_array[line_counter++] = from;
+            recv_array[line_counter++] = to;
+        }
+        line = strtok(NULL, "\n");
+    }
+
+    
+    
+    return line_counter;
+}
+
 // Function to initialize the ranks of all nodes and the top nodes array
 void initialize_ranks() {
     rank = (double *)malloc(sizeof(double) * node_count);
@@ -109,7 +201,6 @@ void calculate_pagerank(int *recv_array, int chunk_size, int min_node) {
     double * temp_rank = (double *)malloc(sizeof(double) * node_count);
 
     for (int iter = 0; iter < MAX_ITER; iter++) {
-        printf("Rank: %d at iteration %d\n", rankId, iter);
         for (int i = 0; i < node_count; i++) {
             temp_rank[i] = (1.0 - DAMPING_FACTOR) / node_count;
         }
@@ -129,14 +220,13 @@ void calculate_pagerank(int *recv_array, int chunk_size, int min_node) {
             converged_ranks[i] = (float)temp_rank[i];
         }
 
+        //Possibile Vettorizzazione o parallelismo
         for (int i = 0; i < chunk_size; i+=2) {
             int from = recv_array[i];
             int to = recv_array[i+1];
                         
-            if (out_degree[from] > 0) {
-                temp_rank[to-min_node] += DAMPING_FACTOR * rank[from-min_node] / out_degree[from];
-                converged_ranks[to] = fabs((temp_rank[to-min_node] - rank[to-min_node]));
-            }
+            temp_rank[to-min_node] += DAMPING_FACTOR * rank[from-min_node] / out_degree[from];
+            converged_ranks[to] = fabs((temp_rank[to-min_node] - rank[to-min_node]));
         }
 
         double diff = 0;
@@ -144,6 +234,9 @@ void calculate_pagerank(int *recv_array, int chunk_size, int min_node) {
             diff += fabs(temp_rank[i] - rank[i]);
             rank[i] = temp_rank[i];
         }
+
+        if(rankId == 0)
+            printf("Iteration %d with diff = %f\n", iter, diff);
 
         if (diff < TOLERANCE) {
             printf("Converged after %d iterations\n", iter + 1);
@@ -178,20 +271,17 @@ void count_statistics(int *recv_array, int chunk_size, int *max_node, int *min_n
     }
 }
 
-int *merge_data(int *neigh_array, double *neigh_rank, int *chunk_size, int *recv_array, int neigh_min, int neigh_max, int *max_node, int *min_node){
+int *merge_data(int *neigh_array, double *neigh_rank, int *edge_count, int neigh_edge, int *recv_array, int neigh_min, int neigh_max, int *max_node, int *min_node){
 
-    (*chunk_size)*=2;
+    (*edge_count) += neigh_edge;
 
-    int *new_array = (int *)malloc(sizeof(int)*(*chunk_size));
-    for(int i = 0;i<*chunk_size;i+=2){
-        if(i>=*chunk_size/2){
-            new_array[i] = neigh_array[i-(*chunk_size)/2];
-            new_array[i+1] = neigh_array[i-(*chunk_size)/2+1];
-        }
-        if(i<*chunk_size/2){
-            new_array[i] = recv_array[i];
-            new_array[i+1] = recv_array[i+1];
-        }
+    int *new_array = (int *)malloc(sizeof(int)*(*edge_count));
+    for(int i = 0;i<*edge_count - neigh_edge;i++){
+        new_array[i] = recv_array[i];
+    }
+
+    for(int i = *edge_count - neigh_edge; i < *edge_count;i++){
+        new_array[i] = neigh_array[i-(*edge_count - neigh_edge)];
     }
     
     int new_max = MAX(*max_node, neigh_max);
@@ -218,7 +308,7 @@ int *merge_data(int *neigh_array, double *neigh_rank, int *chunk_size, int *recv
         }
     }
 
-    count_statistics(new_array, *chunk_size, max_node, min_node, 1); 
+    count_statistics(new_array, *edge_count, max_node, min_node, 1); 
 
     node_count = new_max-new_min;
     rank = new_rank;
@@ -228,11 +318,14 @@ int *merge_data(int *neigh_array, double *neigh_rank, int *chunk_size, int *recv
     return new_array;
 }
 
-int *communicate_pagerank(int *recv_array, int *chunk_size, int neighbour, int *min_node, int *max_node){
+int *communicate_pagerank(int *recv_array, int *edge_count, int neighbour, int *min_node, int *max_node){
     int neigh_min = 0;
     int neigh_max = 0;
-    MPI_Request req[4];
-    MPI_Status stat[4];
+    int neigh_edge = 0;
+    MPI_Request req[6];
+    MPI_Request req2[4];
+    MPI_Status stat[6];
+    MPI_Status stat2[4];
 
     printf("Rank :%d, communicates with :%d\n",rankId, neighbour);
 
@@ -241,23 +334,26 @@ int *communicate_pagerank(int *recv_array, int *chunk_size, int neighbour, int *
     MPI_Irecv(&neigh_min, 1, MPI_INT, neighbour, COMM, MPI_COMM_WORLD, req+1);
     MPI_Isend(max_node, 1, MPI_INT, neighbour, COMM, MPI_COMM_WORLD, req+2);
     MPI_Irecv(&neigh_max, 1, MPI_INT, neighbour, COMM, MPI_COMM_WORLD, req+3);
+    MPI_Isend(edge_count, 1, MPI_INT, neighbour, COMM, MPI_COMM_WORLD, req+4);
+    MPI_Irecv(&neigh_edge, 1, MPI_INT, neighbour, COMM, MPI_COMM_WORLD, req+5);
 
-    MPI_Waitall(4, req, stat);
 
-    printf("Rank : %d recieves from neighbour : %d, MIN : %d, MAX : %d \n", rankId, neighbour, neigh_min, neigh_max);
+    MPI_Waitall(6, req, stat);
 
-    int *neigh_array = (int *)malloc(sizeof(int) * (*chunk_size));
+    printf("Rank : %d recieves from neighbour : %d, MIN : %d, MAX : %d with %d edges\n", rankId, neighbour, neigh_min, neigh_max, neigh_edge);
+
+    int *neigh_array = (int *)malloc(sizeof(int) * (neigh_edge));
     double *neigh_rank = (double *)malloc(sizeof(double)*(neigh_max-neigh_min+1));
 
-    MPI_Isend(recv_array, *chunk_size, MPI_INT, neighbour, COMM, MPI_COMM_WORLD, req);
-    MPI_Irecv(neigh_array, *chunk_size, MPI_INT, neighbour, COMM, MPI_COMM_WORLD, req+1);
-    MPI_Isend(rank, node_count, MPI_DOUBLE, neighbour, COMM, MPI_COMM_WORLD, req+2);
-    MPI_Irecv(neigh_rank, (neigh_max - neigh_min + 1), MPI_DOUBLE, neighbour, COMM, MPI_COMM_WORLD, req+3);
+    MPI_Isend(recv_array, *edge_count, MPI_INT, neighbour, COMM, MPI_COMM_WORLD, req2);
+    MPI_Irecv(neigh_array, neigh_edge, MPI_INT, neighbour, COMM, MPI_COMM_WORLD, req2+1);
+    MPI_Isend(rank, node_count, MPI_DOUBLE, neighbour, COMM, MPI_COMM_WORLD, req2+2);
+    MPI_Irecv(neigh_rank, (neigh_max - neigh_min + 1), MPI_DOUBLE, neighbour, COMM, MPI_COMM_WORLD, req2+3);
 
-    MPI_Waitall(4, req, stat);
+    MPI_Waitall(4, req2, stat2);
     printf("Rank : %d recieved from neighbour %d all the data, merging...\n", rankId, neighbour);
 
-    recv_array = merge_data(neigh_array, neigh_rank, chunk_size, recv_array, neigh_min, neigh_max, max_node, min_node);
+    recv_array = merge_data(neigh_array, neigh_rank, edge_count, neigh_edge, recv_array, neigh_min, neigh_max, max_node, min_node);
 
 
     free(neigh_array);
@@ -268,7 +364,7 @@ int *communicate_pagerank(int *recv_array, int *chunk_size, int neighbour, int *
 void print_final_ranks(int min_node){
     printf("Rank : %d declares final ranks:\n", rankId);
     for(int i = 0;i<node_count;i++){
-        printf("%d: %d --> %f\n",rankId, (i+min_node), rank[i]);
+            printf("%d: %d --> %f\n",rankId, (i+min_node), rank[i]);
     }
 
     printf("Rank %d has declared all pageranks\n", rankId);
@@ -278,7 +374,8 @@ int main(int argc, char *argv[]) {
 
     MPI_Init(&argc, &argv);
 
-    int size, chunk_size, problemDim, neighbour, groupId;
+    int size, problemDim, neighbour, groupId;
+    MPI_File in;
     
     MPI_Comm_rank(MPI_COMM_WORLD, &rankId);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -290,54 +387,41 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    if(rankId == 0){
-        problemDim = read_edges(argv[1]);
-        chunk_size = (problemDim/size)*2;
-    }
-
     out_degree = (int *)calloc(MAX_NODES, sizeof(int));
     converged_ranks = (float *)calloc(MAX_NODES, sizeof(float));
 
-    MPI_Bcast(&chunk_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_File_open(MPI_COMM_WORLD, argv[1], MPI_MODE_RDONLY, MPI_INFO_NULL, &in);
 
     printf("Scattering\n");
-    int *recv_array = (int *)malloc(sizeof(int) * chunk_size);
-    MPI_Scatter(edge_array, chunk_size, MPI_INT, recv_array, chunk_size, MPI_INT, 0, MPI_COMM_WORLD);
-    printf("Scatter ended\n");
+    int *recv_array = (int *)malloc(sizeof(int) * MAX_NODES);
+    int edge_count = parprocess(&in, size, 10, recv_array);
 
     int max_node = 0;
     int min_node = 0;
 
-    count_statistics(recv_array, chunk_size, &max_node, &min_node, 0);
+    count_statistics(recv_array, edge_count, &max_node, &min_node, 0);
 
     node_count = max_node-min_node+1;
 
     initialize_ranks();
     for(int i = 1;i<size;i*=2){
-        calculate_pagerank(recv_array, chunk_size, min_node);
+        calculate_pagerank(recv_array, edge_count, min_node);
         if(groupId % 2 == 0){
             neighbour = rankId + i;
         }else{
             neighbour = rankId - i;
         }
 
-        MPI_Barrier(MPI_COMM_WORLD);
-        printf("----Rank %d over the barrier with size : %d----\n",rankId, i);
-        recv_array = communicate_pagerank(recv_array, &chunk_size, neighbour, &min_node, &max_node);
+        recv_array = communicate_pagerank(recv_array, &edge_count, neighbour, &min_node, &max_node);
 
         groupId = groupId / 2;
         node_count = max_node-min_node+1;
         printf("Rank : %d is now in group %d\n", rankId, groupId);
         printf("Rank : %d has now %d elements\n", rankId, max_node-min_node);
-
-        MPI_Barrier(MPI_COMM_WORLD);
     }
 
-    calculate_pagerank(recv_array, chunk_size, min_node);
+    calculate_pagerank(recv_array, edge_count, min_node);
     printf("Final iteration complete in rank %d, exiting...\n", rankId);
-
-    if(rankId == 0)
-        print_final_ranks(min_node);
 
     //Free dynamically allocated memory
     if(rankId == 0){
