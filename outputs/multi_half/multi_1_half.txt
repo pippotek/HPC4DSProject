@@ -1,9 +1,8 @@
 Number of edges: 900000000
 Number of nodes: 124833781
-PageRank will run with 1 threads.
+PageRank will run with 1 threads
 Converged after 22 iterations
-Time taken to converge: 907.913101 seconds
-
+Time taken to converge: 1205.651740 seconds
 Top 10 nodes by PageRank:
 Node 32667808: 0.0000017375
 Node 28213592: 0.0000016987
