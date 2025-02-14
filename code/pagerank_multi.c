@@ -70,9 +70,6 @@ void read_edges(const char *filename) {
             if (to > node_count) node_count = to;
 
             edge_count++;
-            if (edge_count == 450000000){
-                break;
-            }
         }
     }
     fclose(file);
