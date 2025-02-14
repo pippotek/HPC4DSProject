@@ -72,7 +72,7 @@ void read_edges(const char *filename) {
 
             edge_count++;
 
-            if (edge_count>=450000000){
+            if (edge_count>=225000000){
                 break;
             }
         }
