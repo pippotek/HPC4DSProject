@@ -1,147 +1,124 @@
-# HPC4DS Project
+# HPC4DS Project - High-Performance Computing for Data Science
 
-This repository contains the code for the **High-Performance Computing for Data Science (HPC4DS)** project by **Filippo Costamagna** and **Stefano Romeo**. The project investigates the parallelization of the **PageRank** algorithm using different parallel computing solutions. The goal is to analyze how different levels of parallelism affect the efficiency and scalability of the algorithm when applied to very large graphs.
+## Authors:
+- **Filippo Costamagna** (University of Trento)
+- **Stefano Romeo** (University of Trento)
 
 ## Overview
 
-The **PageRank algorithm**, originally developed by Larry Page and Sergey Brin, is a fundamental method for ranking web pages based on link structures. The algorithm models the web as a directed graph, where nodes represent web pages, and edges signify hyperlinks. The iterative process propagates rank scores throughout the network, converging towards a steady-state distribution that reflects the importance of each node.
+This repository contains the code for the **High-Performance Computing for Data Science (HPC4DS)** project, which investigates the parallelization of the **PageRank algorithm** using different parallel computing paradigms. The primary goal is to analyze the impact of parallelization on the efficiency and scalability of PageRank when applied to large-scale graphs.
 
-With the growth of the internet and social networks, single-threaded implementations of PageRank become computationally infeasible due to the vast amount of data involved. This project explores parallel implementations using **OpenMP** and **MPI**, optimizing computational performance through shared and distributed memory paradigms. 
+The project compares **shared-memory (OpenMP)** and **distributed-memory (MPI)** approaches and evaluates **two hybrid implementations** that leverage both. The research findings are based on extensive benchmarking performed on the **HPC cluster at the University of Trento**, using the **Friendster social network dataset** (65.6 million nodes, 1.8 billion edges).
+
+---
+
+## PageRank Algorithm
+
+The **PageRank algorithm**, developed by **Larry Page and Sergey Brin**, is an iterative ranking method that assigns importance to nodes in a directed graph based on the structure of incoming links. The fundamental equation is:
+
+\[ PR(P_i) = \frac{1 - d}{N} + d \sum_{P_j \in M(P_i)} \frac{PR(P_j)}{L(P_j)} \]
+
+where:
+- **d** = damping factor (default: 0.85)
+- **N** = total number of nodes
+- **M(P_i)** = set of pages linking to **P_i**
+- **L(P_j)** = number of outgoing links from **P_j**
+
+This iterative process continues until convergence, making it computationally expensive, especially for large-scale graphs.
+
+---
 
 ## Implementations
 
-### 1. **Basic Multithreading Implementation (OpenMP)**
+### **1. Basic Multithreading Implementation (OpenMP)**
 
 - **File:** `pagerank_multithread.c`
-- **Description:**
-  - Implements the PageRank algorithm using **OpenMP** for shared-memory parallelism.
-  - Key parallelized steps include:
-    - Rank initialization.
-    - Parallel processing of edges.
-    - Handling of dangling nodes.
-  - Uses atomic operations to manage shared data updates efficiently.
-- **Performance Trade-offs:**
-  - Improves speedup but experiences contention in shared-memory operations.
-  - Effective for multi-core architectures with moderate dataset sizes.
+- **Approach:** Uses OpenMP to parallelize the rank propagation step in a shared-memory environment.
+- **Optimizations:**
+  - Uses atomic operations to prevent race conditions.
+  - Reduces contention by carefully scheduling iterations.
+- **Trade-offs:**
+  - Improves performance for moderate dataset sizes.
+  - Faces bottlenecks due to shared-memory contention beyond **16 threads**.
 
----
-
-### 2. **Optimized Multithreading with Local Accumulation**
+### **2. Optimized Multithreading with Local Accumulation (OpenMP)**
 
 - **File:** `pagerank_multithread_optimized.c`
-- **Description:**
-  - Improves OpenMP efficiency by introducing **thread-local storage** for rank accumulation.
-  - Reduces contention by merging thread-local contributions into the final rank array at the end of each iteration.
-- **Performance Trade-offs:**
-  - Achieves better scalability for large graphs by reducing memory contention.
-  - Higher memory overhead due to per-thread local arrays.
-  - Less efficient on smaller datasets due to synchronization costs.
+- **Approach:**
+  - Uses **thread-local buffers** for rank updates before merging results.
+  - Reduces memory contention by deferring shared-memory writes.
+- **Trade-offs:**
+  - More scalable for large graphs due to reduced atomic operations.
+  - Increased memory overhead per thread.
+  - Performance deteriorates beyond **16 threads** due to merge overhead.
 
----
-
-### 3. **MPI-based Distributed Parallel Implementation**
+### **3. MPI-Based Distributed Parallel Implementation**
 
 - **File:** `mpi_pagerank.c`
-- **Description:**
-  - Implements **distributed parallelization** using **MPI** to handle very large-scale graphs.
-  - Distributes edge partitions across multiple computing nodes to optimize workload.
-  - Synchronizes global rank values across processes to ensure convergence.
-- **Performance Trade-offs:**
-  - **Strong scalability up to 16 processes**, but communication overhead increases with more nodes.
-  - More efficient than OpenMP for extremely large datasets but requires careful tuning of communication strategies.
-  - Suitable for high-performance computing (HPC) clusters.
+- **Approach:**
+  - Distributes edge partitions across multiple MPI processes.
+  - Uses **MPI Allreduce** for global rank synchronization.
+- **Trade-offs:**
+  - Scales well up to **16 MPI processes**.
+  - Communication overhead becomes dominant beyond **16 processes**.
+
+### **4. Hybrid OpenMP + MPI Implementations**
+
+There are **two hybrid implementations**, each corresponding to one of the OpenMP versions:
+
+- **Hybrid Basic OpenMP + MPI:**
+  - Uses MPI for inter-node parallelism and OpenMP for intra-node parallelism.
+  - Faces contention due to atomic operations, limiting scalability beyond **16 processes/threads**.
+
+- **Hybrid Optimized OpenMP + MPI:**
+  - Implements thread-local storage optimizations within OpenMP alongside MPI parallelism.
+  - Reduces atomic contention but introduces overhead from merging local accumulations.
+  - Scalability declines beyond **16 processes/threads** due to synchronization overhead.
 
 ---
 
 ## Performance Evaluation
 
-Experiments were conducted on the **HPC cluster at the University of Trento** using the **Friendster social network dataset**:
-- **65.6 million nodes**
-- **1.8 billion edges**
-- **30.14 GB dataset size**
+### **Experimental Setup**
 
-The results show:
-- **OpenMP achieves good speedup up to 16-32 threads** but faces synchronization bottlenecks beyond that.
-- **MPI scales well up to 16 nodes** but suffers from increasing communication overhead at higher counts.
-- **Hybrid OpenMP+MPI strategies were tested but did not yield consistent improvements due to additional synchronization complexity.**
+- **Cluster:** HPC @ University of Trento
+- **Dataset:** Friendster Social Network
+  - **Nodes:** 65.6M
+  - **Edges:** 1.8B
+  - **Size:** 30.14GB
+- **Testing:**
+  - Strong and weak scaling experiments
+  - Evaluated on **1/8, 1/4, 1/2, and full dataset**
 
----
+### **Results Summary**
 
-## Key Differences Among Implementations
+| Implementation | Max Speedup | Best Scalability | Bottleneck |
+|---------------|------------|------------------|------------|
+| **OpenMP (Basic)** | ~13.7× (16 threads) | Up to 16 threads | Atomic contention |
+| **OpenMP (Optimized)** | ~19.3× (16 threads) | Up to 16 threads | Merge overhead |
+| **MPI (Distributed)** | ~7.78× (16 processes) | Up to 16 processes | Communication latency |
+| **Hybrid (Basic)** | ~8.55× (16 processes) | Similar to MPI | Synchronization complexity |
+| **Hybrid (Optimized)** | ~10.88× (16 processes) | Similar to MPI | Merge and sync overhead |
 
-| **Feature**         | **Basic Multithreading (OpenMP)** | **Optimized Multithreading (OpenMP)** | **MPI-based Implementation** |
-|---------------------|---------------------------------|-----------------------------------|------------------------------|
-| **Parallelism**     | OpenMP parallel loops          | OpenMP with local storage        | MPI for distributed memory   |
-| **Performance**     | Faster than sequential         | More scalable with large graphs  | Best for extremely large datasets |
-| **Memory Usage**    | Moderate (shared arrays)       | Higher (per-thread local arrays) | Lower per node (distributed) |
-| **Scalability**     | Good                           | Excellent                         | Excellent with sufficient nodes |
-| **Communication Overhead** | Low                 | Moderate                          | High                         |
-
----
-
-## Compilation and Execution
-
-### Compilation
-
-```bash
-# Compile the OpenMP versions
-gcc -o pagerank_multithread pagerank_multithread.c -lm -fopenmp
-gcc -o pagerank_multithread_optimized pagerank_multithread_optimized.c -lm -fopenmp
-
-# Compile the MPI version
-mpicc -O3 -o mpi_pagerank mpi_pagerank.c -lm
-```
-
-### Running
-
-```bash
-# Run the multithreaded version
-./pagerank_multithread edge_list.txt
-
-# Run the MPI-based version with 4 processes
-mpirun -np 4 ./mpi_pagerank edge_list.txt
-```
-
-### Edge List Format
-
-The input file should contain one edge per line in the format:
-
-`<source_node> <destination_node>`
-
-Example:
-```plaintext
-0 1
-1 2
-2 0
-```
-
-### Output
-
-Each implementation outputs:
-- **Total number of nodes and edges**
-- **Time taken for convergence**
-- **Top 10 nodes with the highest PageRank**
-
-Example output:
-```plaintext
-Number of edges: 3
-Number of nodes: 3
-Converged after 20 iterations
-Time taken: 0.123456 seconds
-
-Top 10 nodes by PageRank:
-Node 2: 0.3876543210
-Node 0: 0.3065432109
-Node 1: 0.3058024671
-```
+### **Key Observations**
+- **Scalability significantly deteriorates beyond 16 threads/processes across all implementations.**
+- **MPI-based implementation scales better for large datasets** but has increasing communication overhead.
+- **Hybrid approaches did not provide substantial improvements beyond 16 processes/threads.**
+- **Future improvements could focus on asynchronous MPI communication and GPU acceleration.**
 
 ---
 
-## Authors
-- **Filippo Costamagna** (University of Trento)
-- **Stefano Romeo** (University of Trento)
+## Conclusion
+
+This project provides a **comprehensive performance analysis of parallel PageRank implementations**. It highlights the trade-offs between OpenMP and MPI approaches and discusses the challenges in achieving optimal parallelism. Future research could explore **GPU acceleration, NUMA-aware optimizations, and asynchronous MPI communication** to further enhance performance.
+
+---
 
 ## License
 This project is licensed under the **MIT License** – see the LICENSE file for details.
 
 ---
+
+## References
+For a detailed discussion, see the corresponding research paper: [Parallel Implementations of the PageRank Algorithm] by **Filippo Costamagna** and **Stefano Romeo** (University of Trento).
+
