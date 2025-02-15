@@ -10,23 +10,6 @@ This repository contains the code for the **High-Performance Computing for Data 
 
 The project compares **shared-memory (OpenMP)** and **distributed-memory (MPI)** approaches and evaluates **two hybrid implementations** that leverage both. The research findings are based on extensive benchmarking performed on the **HPC cluster at the University of Trento**, using the **Friendster social network dataset** (65.6 million nodes, 1.8 billion edges).
 
----
-
-## PageRank Algorithm
-
-The **PageRank algorithm**, developed by **Larry Page and Sergey Brin**, is an iterative ranking method that assigns importance to nodes in a directed graph based on the structure of incoming links. The fundamental equation is:
-
-\[ PR(P_i) = \frac{1 - d}{N} + d \sum_{P_j \in M(P_i)} \frac{PR(P_j)}{L(P_j)} \]
-
-where:
-- **d** = damping factor (default: 0.85)
-- **N** = total number of nodes
-- **M(P_i)** = set of pages linking to **P_i**
-- **L(P_j)** = number of outgoing links from **P_j**
-
-This iterative process continues until convergence, making it computationally expensive, especially for large-scale graphs.
-
----
 
 ## Implementations
 
@@ -54,7 +37,7 @@ This iterative process continues until convergence, making it computationally ex
 
 ### **3. MPI-Based Distributed Parallel Implementation**
 
-- **File:** `mpi_pagerank.c`
+- **File:** `pagerank_parallel.c`
 - **Approach:**
   - Distributes edge partitions across multiple MPI processes.
   - Uses **MPI Allreduce** for global rank synchronization.
