@@ -1,0 +1,56 @@
+Number of edges: 1806067135
+Number of nodes: 124836180
+Process 7: PageRank will run with 2 threads per process.
+Process 5: PageRank will run with 2 threads per process.
+Process 6: PageRank will run with 2 threads per process.
+Process 1: PageRank will run with 2 threads per process.
+Process 2: PageRank will run with 2 threads per process.
+Process 4: PageRank will run with 2 threads per process.
+Process 3: PageRank will run with 2 threads per process.
+Process 0: PageRank will run with 2 threads per process.
+Iteration 1: diff = 0.3485363897
+Iteration 2: diff = 0.1839588267
+Iteration 3: diff = 0.1081629303
+Iteration 4: diff = 0.0694861735
+Iteration 5: diff = 0.0467726997
+Iteration 6: diff = 0.0319285361
+Iteration 7: diff = 0.0217170744
+Iteration 8: diff = 0.0146407118
+Iteration 9: diff = 0.0097845204
+Iteration 10: diff = 0.0065056089
+Iteration 11: diff = 0.0043552142
+Iteration 12: diff = 0.0029328054
+Iteration 13: diff = 0.0019588064
+Iteration 14: diff = 0.0013159621
+Iteration 15: diff = 0.0008966179
+Iteration 16: diff = 0.0006211018
+Iteration 17: diff = 0.0004348755
+Iteration 18: diff = 0.0003043157
+Iteration 19: diff = 0.0002115776
+Iteration 20: diff = 0.0001452200
+Iteration 21: diff = 0.0000983052
+Iteration 22: diff = 0.0000658631
+Iteration 23: diff = 0.0000436206
+Iteration 24: diff = 0.0000284350
+Iteration 25: diff = 0.0000182132
+Iteration 26: diff = 0.0000118560
+Iteration 27: diff = 0.0000079111
+Iteration 28: diff = 0.0000053526
+Iteration 29: diff = 0.0000036922
+Iteration 30: diff = 0.0000025837
+Iteration 31: diff = 0.0000018149
+Iteration 32: diff = 0.0000012678
+Iteration 33: diff = 0.0000008744
+Converged after 33 iterations
+Time taken to converge: 730.040030 seconds
+Top 10 nodes by PageRank:
+Node 124511661: 0.0000374088
+Node 124242676: 0.0000262346
+Node 124545342: 0.0000240706
+Node 117927534: 0.0000227717
+Node 117735467: 0.0000219457
+Node 124439113: 0.0000217826
+Node 117757131: 0.0000206890
+Node 117643203: 0.0000202480
+Node 124397694: 0.0000201059
+Node 124378151: 0.0000200159
