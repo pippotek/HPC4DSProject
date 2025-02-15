@@ -1,6 +1,6 @@
 # HPC4DS Project
 
-This repository contains the code for the **High-Performance Computing for Data Science (HPC4DS)** project by **Filippo Costamagna** and **Stefano Romeo**. The project investigates the parallelization of the **PageRank** algorithm using different parallel computing solutions. The goal is to analyze how different levels of parallelism affect the efficiency and scalability of the algorithm when applied to very large graphs.
+This repository contains the project code for the **High-Performance Computing for Data Science (HPC4DS)** course **@UniTN** by **Filippo Costamagna** and **Stefano Romeo**. The project investigates the parallelization of the **PageRank** algorithm using different parallel computing solutions. The goal is to analyze how different levels of parallelism affect the efficiency and scalability of the algorithm when applied to very large graphs.
 
 ## Implementations
 
