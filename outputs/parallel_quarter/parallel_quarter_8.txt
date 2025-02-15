@@ -1,22 +1,22 @@
 Number of edges: 450000000
 Number of nodes: 124833694
-Iteration 1: diff = 0.0655774300
-Iteration 2: diff = 0.0240428870
+Iteration 1: diff = 0.0655774305
+Iteration 2: diff = 0.0240428868
 Iteration 3: diff = 0.0088786361
-Iteration 4: diff = 0.0033546044
+Iteration 4: diff = 0.0033546042
 Iteration 5: diff = 0.0013231908
-Iteration 6: diff = 0.0005406796
-Iteration 7: diff = 0.0002287791
-Iteration 8: diff = 0.0000999960
-Iteration 9: diff = 0.0000451174
-Iteration 10: diff = 0.0000209557
-Iteration 11: diff = 0.0000099975
+Iteration 6: diff = 0.0005406795
+Iteration 7: diff = 0.0002287796
+Iteration 8: diff = 0.0000999954
+Iteration 9: diff = 0.0000451170
+Iteration 10: diff = 0.0000209556
+Iteration 11: diff = 0.0000099974
 Iteration 12: diff = 0.0000048924
-Iteration 13: diff = 0.0000024506
+Iteration 13: diff = 0.0000024504
 Iteration 14: diff = 0.0000012529
-Iteration 15: diff = 0.0000006524
+Iteration 15: diff = 0.0000006523
 Converged after 15 iterations
-Time taken to converge: 229.984380 seconds
+Time taken to converge: 140.998246 seconds
 Top 10 nodes by PageRank:
 Node 14039181: 0.0000011040
 Node 2905057: 0.0000009474

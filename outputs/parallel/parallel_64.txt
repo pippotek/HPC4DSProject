@@ -6,7 +6,7 @@ Iteration 3: diff = 0.1081629303
 Iteration 4: diff = 0.0694861735
 Iteration 5: diff = 0.0467726997
 Iteration 6: diff = 0.0319285361
-Iteration 7: diff = 0.0217170744
+Iteration 7: diff = 0.0217170745
 Iteration 8: diff = 0.0146407118
 Iteration 9: diff = 0.0097845204
 Iteration 10: diff = 0.0065056089
@@ -20,21 +20,21 @@ Iteration 17: diff = 0.0004348755
 Iteration 18: diff = 0.0003043157
 Iteration 19: diff = 0.0002115776
 Iteration 20: diff = 0.0001452200
-Iteration 21: diff = 0.0000983052
-Iteration 22: diff = 0.0000658631
+Iteration 21: diff = 0.0000983053
+Iteration 22: diff = 0.0000658632
 Iteration 23: diff = 0.0000436206
 Iteration 24: diff = 0.0000284350
-Iteration 25: diff = 0.0000182132
+Iteration 25: diff = 0.0000182133
 Iteration 26: diff = 0.0000118560
 Iteration 27: diff = 0.0000079111
 Iteration 28: diff = 0.0000053526
 Iteration 29: diff = 0.0000036922
-Iteration 30: diff = 0.0000025837
+Iteration 30: diff = 0.0000025838
 Iteration 31: diff = 0.0000018149
 Iteration 32: diff = 0.0000012678
 Iteration 33: diff = 0.0000008744
 Converged after 33 iterations
-Time taken to converge: 529.624614 seconds
+Time taken to converge: 572.534339 seconds
 Top 10 nodes by PageRank:
 Node 124511661: 0.0000374088
 Node 124242676: 0.0000262346

@@ -16,7 +16,7 @@ Iteration 13: diff = 0.0000024497
 Iteration 14: diff = 0.0000012531
 Iteration 15: diff = 0.0000006541
 Converged after 15 iterations
-Time taken to converge: 671.526779 seconds
+Time taken to converge: 369.682619 seconds
 Top 10 nodes by PageRank:
 Node 14039181: 0.0000011040
 Node 2905057: 0.0000009474
