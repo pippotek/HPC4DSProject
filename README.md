@@ -47,7 +47,7 @@ With the growth of the internet and social networks, single-threaded implementat
   - Distributes edge partitions across multiple computing nodes to optimize workload.
   - Synchronizes global rank values across processes to ensure convergence.
 - **Performance Trade-offs:**
-  - **Strong scalability up to 16-32 processes**, but communication overhead increases with more nodes.
+  - **Strong scalability up to 16 processes**, but communication overhead increases with more nodes.
   - More efficient than OpenMP for extremely large datasets but requires careful tuning of communication strategies.
   - Suitable for high-performance computing (HPC) clusters.
 
@@ -62,7 +62,7 @@ Experiments were conducted on the **HPC cluster at the University of Trento** us
 
 The results show:
 - **OpenMP achieves good speedup up to 16-32 threads** but faces synchronization bottlenecks beyond that.
-- **MPI scales well up to 32 nodes** but suffers from increasing communication overhead at higher counts.
+- **MPI scales well up to 16 nodes** but suffers from increasing communication overhead at higher counts.
 - **Hybrid OpenMP+MPI strategies were tested but did not yield consistent improvements due to additional synchronization complexity.**
 
 ---
