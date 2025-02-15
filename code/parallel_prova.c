@@ -132,7 +132,7 @@
              if (from > max_node) max_node = from;
              if (to   > max_node) max_node = to;
              edge_count++;
-             if (edge_count >= 225000000){
+             if (edge_count >= 900000000){
                 break;
              }
          }
