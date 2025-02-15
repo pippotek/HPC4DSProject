@@ -145,6 +145,3 @@ Node 1: 0.3058024671
 This project is licensed under the **MIT License** – see the LICENSE file for details.
 
 ---
-
-### 🚀 Happy Computing! 🚀
-
